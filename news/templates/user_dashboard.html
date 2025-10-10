@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Activity - Newsify</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 40px;
+        }
+
+        .header-left {
+            color: white;
+        }
+
+        .header-left h1 {
+            font-size: 42px;
+            margin-bottom: 5px;
+        }
+
+        .header-left p {
+            font-size: 16px;
+            opacity: 0.9;
+        }
+
+        .back-btn {
+            padding: 12px 24px;
+            background: white;
+            color: #667eea;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            transition: all 0.3s;
+        }
+
+        .back-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(255, 255, 255, 0.3);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 25px;
+            margin-bottom: 40px;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            text-align: center;
+            transition: transform 0.3s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .stat-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+
+        .stat-number {
+            font-size: 48px;
+            font-weight: bold;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 10px;
+        }
+
+        .stat-label {
+            color: #666;
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .content-section {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            margin-bottom: 30px;
+        }
+
+        .section-title {
+            font-size: 24px;
+            margin-bottom: 25px;
+            color: #333;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .preferences-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .preference-card {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            padding: 20px;
+            border-radius: 15px;
+            text-align: center;
+            transition: all 0.3s;
+        }
+
+        .preference-card:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .preference-name {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+            text-transform: capitalize;
+        }
+
+        .preference-bar {
+            width: 100%;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 5px;
+        }
+
+        .preference-fill {
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 10px;
+            transition: width 0.5s;
+        }
+
+        .preference-score {
+            font-size: 14px;
+            color: #666;
+        }
+
+        .activity-list {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .activity-item {
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.3s;
+        }
+
+        .activity-item:hover {
+            background: #e9ecef;
+            transform: translateX(5px);
+        }
+
+        .activity-content {
+            flex: 1;
+        }
+
+        .activity-title {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .activity-meta {
+            font-size: 14px;
+            color: #999;
+        }
+
+        .activity-badge {
+            padding: 6px 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+
+        .empty-state-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                gap: 20px;
+                text-align: center;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .preferences-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="header-left">
+                <h1>📊 My Activity</h1>
+                <p>Track your reading habits and preferences</p>
+            </div>
+            <a href="/" class="back-btn">← Back to News</a>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon">📰</div>
+                <div class="stat-number" id="articlesRead">0</div>
+                <div class="stat-label">Articles Read</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">👍</div>
+                <div class="stat-number" id="upvotesGiven">0</div>
+                <div class="stat-label">Upvotes Given</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">💬</div>
+                <div class="stat-number" id="commentsPosted">0</div>
+                <div class="stat-label">Comments Posted</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">🎯</div>
+                <div class="stat-number" id="favoriteCategory">-</div>
+                <div class="stat-label">Favorite Category</div>
+            </div>
+        </div>
+
+        <div class="content-section">
+            <h2 class="section-title">🎨 Your Interests</h2>
+            <p style="color: #666; margin-bottom: 25px;">We personalize your feed based on these preferences</p>
+            <div class="preferences-grid" id="preferencesGrid">
+                <div class="empty-state">
+                    <div class="empty-state-icon">🔍</div>
+                    <p>Start voting and reading to build your preferences!</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="content-section">
+            <h2 class="section-title">⚡ Recent Activity</h2>
+            <div class="activity-list" id="activityList">
+                <div class="empty-state">
+                    <div class="empty-state-icon">📭</div>
+                    <p>No recent activity. Start exploring news!</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            loadUserStats();
+        });
+
+        async function loadUserStats() {
+            try {
+                const response = await fetch('/api/user-stats/');
+                const data = await response.json();
+                
+                // Update stats
+                document.getElementById('articlesRead').textContent = data.articles_read || 0;
+                document.getElementById('upvotesGiven').textContent = data.upvotes_given || 0;
+                document.getElementById('commentsPosted').textContent = data.comments_posted || 0;
+                document.getElementById('favoriteCategory').textContent = data.favorite_category || '-';
+                
+                // Display preferences
+                if (data.preferences && Object.keys(data.preferences).length > 0) {
+                    const preferencesGrid = document.getElementById('preferencesGrid');
+                    preferencesGrid.innerHTML = Object.entries(data.preferences)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([category, score]) => {
+                            const percentage = (score / 10) * 100;
+                            return `
+                                <div class="preference-card">
+                                    <div class="preference-name">${category}</div>
+                                    <div class="preference-bar">
+                                        <div class="preference-fill" style="width: ${percentage}%"></div>
+                                    </div>
+                                    <div class="preference-score">${score.toFixed(1)}/10</div>
+                                </div>
+                            `;
+                        }).join('');
+                }
+                
+                // Display recent activity
+                if (data.recent_activity && data.recent_activity.length > 0) {
+                    const activityList = document.getElementById('activityList');
+                    activityList.innerHTML = data.recent_activity.map(activity => `
+                        <div class="activity-item">
+                            <div class="activity-content">
+                                <div class="activity-title">${activity.title}</div>
+                                <div class="activity-meta">${activity.time}</div>
+                            </div>
+                            <div class="activity-badge">${activity.type}</div>
+                        </div>
+                    `).join('');
+                }
+                
+            } catch (error) {
+                console.error('Error loading user stats:', error);
+            }
+        }
+    </script>
+</body>
+</html>

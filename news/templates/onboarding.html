@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome to Newsify</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .onboarding-container {
+            background: white;
+            border-radius: 30px;
+            padding: 60px;
+            max-width: 700px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            animation: slideUp 0.5s ease;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .welcome-header {
+            text-align: center;
+            margin-bottom: 50px;
+        }
+
+        .welcome-header h1 {
+            font-size: 42px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 15px;
+        }
+
+        .welcome-header p {
+            color: #666;
+            font-size: 18px;
+            line-height: 1.6;
+        }
+
+        .form-section {
+            margin-bottom: 40px;
+        }
+
+        .section-title {
+            font-size: 22px;
+            color: #333;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .section-description {
+            color: #666;
+            margin-bottom: 20px;
+            font-size: 15px;
+        }
+
+        .categories-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 10px;
+        }
+
+        .category-checkbox {
+            display: none;
+        }
+
+        .category-label {
+            display: block;
+            padding: 20px;
+            background: #f5f7fa;
+            border: 2px solid #e0e0e0;
+            border-radius: 15px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 600;
+            color: #666;
+        }
+
+        .category-checkbox:checked + .category-label {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-color: #667eea;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .category-label:hover {
+            border-color: #667eea;
+            transform: translateY(-2px);
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 14px 18px;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            font-size: 15px;
+            transition: all 0.3s;
+            font-family: inherit;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 10px;
+            color: #333;
+            font-weight: 600;
+        }
+
+        .error-text {
+            color: #c33;
+            font-size: 13px;
+            margin-top: 10px;
+        }
+
+        .btn-submit {
+            width: 100%;
+            padding: 18px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 15px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 20px;
+        }
+
+        .btn-submit:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        .selected-count {
+            text-align: center;
+            color: #667eea;
+            font-weight: 600;
+            margin-top: 15px;
+            font-size: 14px;
+        }
+
+        @media (max-width: 768px) {
+            .onboarding-container {
+                padding: 40px 30px;
+            }
+
+            .welcome-header h1 {
+                font-size: 32px;
+            }
+
+            .categories-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="onboarding-container">
+        <div class="welcome-header">
+            <h1>🎉 Welcome to Newsify!</h1>
+            <p>Let's personalize your news experience. Tell us what interests you.</p>
+        </div>
+
+        <form method="post" id="onboardingForm">
+            {% csrf_token %}
+            
+            <div class="form-section">
+                <h2 class="section-title">📚 Choose Your Interests</h2>
+                <p class="section-description">Select at least 3 categories you want to follow</p>
+                
+                <div class="categories-grid">
+                    <div>
+                        <input type="checkbox" name="preferred_categories" value="technology" id="cat-tech" class="category-checkbox">
+                        <label for="cat-tech" class="category-label">
+                            💻<br>Technology
+                        </label>
+                    </div>
+                    <div>
+                        <input type="checkbox" name="preferred_categories" value="sports" id="cat-sports" class="category-checkbox">
+                        <label for="cat-sports" class="category-label">
+                            ⚽<br>Sports
+                        </label>
+                    </div>
+                    <div>
+                        <input type="checkbox" name="preferred_categories" value="business" id="cat-business" class="category-checkbox">
+                        <label for="cat-business" class="category-label">
+                            💼<br>Business
+                        </label>
+                    </div>
+                    <div>
+                        <input type="checkbox" name="preferred_categories" value="entertainment" id="cat-entertainment" class="category-checkbox">
+                        <label for="cat-entertainment" class="category-label">
+                            🎬<br>Entertainment
+                        </label>
+                    </div>
+                    <div>
+                        <input type="checkbox" name="preferred_categories" value="health" id="cat-health" class="category-checkbox">
+                        <label for="cat-health" class="category-label">
+                            💊<br>Health
+                        </label>
+                    </div>
+                    <div>
+                        <input type="checkbox" name="preferred_categories" value="science" id="cat-science" class="category-checkbox">
+                        <label for="cat-science" class="category-label">
+                            🔬<br>Science
+                        </label>
+                    </div>
+                    <div>
+                        <input type="checkbox" name="preferred_categories" value="world" id="cat-world" class="category-checkbox">
+                        <label for="cat-world" class="category-label">
+                            🌍<br>World News
+                        </label>
+                    </div>
+                    <div>
+                        <input type="checkbox" name="preferred_categories" value="politics" id="cat-politics" class="category-checkbox">
+                        <label for="cat-politics" class="category-label">
+                            🏛️<br>Politics
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="selected-count" id="selectedCount">0 selected (minimum 3 required)</div>
+                
+                {% if form.preferred_categories.errors %}
+                    <div class="error-text">{{ form.preferred_categories.errors.0 }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-section">
+                <h2 class="section-title">🌍 Additional Info (Optional)</h2>
+                
+                <div class="form-group">
+                    <label class="form-label">Country</label>
+                    {{ form.country }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">About You</label>
+                    {{ form.bio }}
+                </div>
+            </div>
+
+            <button type="submit" class="btn-submit" id="submitBtn" disabled>
+                Complete Setup & Start Reading
+            </button>
+        </form>
+    </div>
+
+    <script>
+        const checkboxes = document.querySelectorAll('.category-checkbox');
+        const selectedCount = document.getElementById('selectedCount');
+        const submitBtn = document.getElementById('submitBtn');
+
+        function updateCount() {
+            const checked = document.querySelectorAll('.category-checkbox:checked').length;
+            selectedCount.textContent = `${checked} selected ${checked < 3 ? '(minimum 3 required)' : '✓'}`;
+            
+            if (checked >= 3) {
+                submitBtn.disabled = false;
+                selectedCount.style.color = '#4caf50';
+            } else {
+                submitBtn.disabled = true;
+                selectedCount.style.color = '#667eea';
+            }
+        }
+
+        checkboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', updateCount);
+        });
+
+        updateCount();
+    </script>
+</body>
+</html>

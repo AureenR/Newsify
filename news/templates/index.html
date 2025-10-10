@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Newsify - Smart News, Better Insights</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 20px 0;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            animation: slideDown 0.5s ease;
+        }
+
+        @keyframes slideDown {
+            from {
+                transform: translateY(-100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .logo {
+            font-size: 32px;
+            font-weight: bold;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .search-bar {
+            flex: 0 0 400px;
+            position: relative;
+        }
+
+        .search-bar input {
+            width: 100%;
+            padding: 12px 40px 12px 20px;
+            border: 2px solid #e0e0e0;
+            border-radius: 25px;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        .search-bar input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .search-icon {
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #667eea;
+            font-size: 18px;
+        }
+
+        .category-tabs {
+            background: white;
+            padding: 15px 0;
+            margin: 20px 0;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            overflow-x: auto;
+            white-space: nowrap;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            padding: 0 20px;
+        }
+
+        .tab {
+            padding: 12px 24px;
+            background: #f5f5f5;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+            color: #666;
+        }
+
+        .tab:hover {
+            background: #667eea;
+            color: white;
+            transform: translateY(-2px);
+        }
+
+        .tab.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .content-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 30px;
+            margin-top: 30px;
+        }
+
+        .news-section {
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+        }
+
+        .news-card {
+            background: white;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s;
+            animation: fadeIn 0.5s ease;
+            display: flex;
+            flex-direction: column;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .news-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+        }
+
+        .news-image {
+    width: 100%;
+    height: 250px;
+    object-fit: contain;
+    background-color: #f8f9fa;
+}
+
+        .news-content {
+            padding: 25px;
+        }
+
+        .news-category {
+            display: inline-block;
+            padding: 6px 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            text-transform: capitalize;
+        }
+
+        .news-title {
+            font-size: 22px;
+            font-weight: bold;
+            margin: 12px 0;
+            color: #222;
+            line-height: 1.4;
+        }
+
+        .news-description {
+            color: #666;
+            line-height: 1.6;
+            margin: 12px 0;
+        }
+
+        .news-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #f0f0f0;
+        }
+
+        .news-source {
+            color: #888;
+            font-size: 13px;
+        }
+
+        .news-time {
+            color: #999;
+            font-size: 13px;
+        }
+
+        .news-actions {
+            display: flex;
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .action-btn {
+            flex: 1;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            background: white;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .action-btn:hover {
+            border-color: #667eea;
+            color: #667eea;
+            transform: scale(1.05);
+        }
+
+        .action-btn.upvoted {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .action-btn.downvoted {
+            background: #ff6b6b;
+            color: white;
+            border-color: #ff6b6b;
+        }
+
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+        }
+
+        .sidebar-card {
+            background: white;
+            border-radius: 20px;
+            padding: 25px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .sidebar-title {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: #222;
+        }
+
+        .poll-option {
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 12px;
+            margin-bottom: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .poll-option:hover {
+            background: #e0e0e0;
+        }
+
+        .poll-option.selected {
+            background: #667eea;
+            color: white;
+        }
+
+        .poll-percentage {
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            background: rgba(102, 126, 234, 0.2);
+            transition: width 0.5s;
+        }
+
+        .poll-text {
+            position: relative;
+            z-index: 1;
+        }
+
+        .comment-box {
+            margin-top: 20px;
+            display: none;
+        }
+
+        .comment-input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            font-size: 14px;
+            resize: vertical;
+            min-height: 80px;
+            transition: all 0.3s;
+            font-family: inherit;
+        }
+
+        .comment-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .comment-btn {
+            margin-top: 10px;
+            padding: 10px 24px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .comment-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .comment {
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 12px;
+            margin-top: 12px;
+        }
+
+        .comment-author {
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+
+        .comment-text {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: white;
+            font-size: 18px;
+        }
+
+        @media (max-width: 1024px) {
+            .content-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .header-content {
+                flex-direction: column;
+            }
+
+            .search-bar {
+                flex: 1;
+                width: 100%;
+            }
+
+            .tabs {
+                overflow-x: auto;
+            }
+
+            .logo {
+                font-size: 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <div class="logo">📰 NEWSIFY</div>
+            <div class="search-bar">
+                <input type="text" placeholder="Search news..." id="searchInput">
+                <span class="search-icon">🔍</span>
+            </div>
+            <div style="display: flex; gap: 15px; align-items: center;">
+                {% if user.is_authenticated %}
+                    <span style="color: #667eea; font-weight: 600;">Hi, {{ user.first_name }}!</span>
+                    <a href="/my-activity/" style="padding: 10px 20px; background: white; color: #667eea; border-radius: 10px; text-decoration: none; font-weight: 600;">My Activity</a>
+                    {% if user.is_staff %}
+                        <a href="/dashboard/" style="padding: 10px 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 10px; text-decoration: none; font-weight: 600;">Admin Panel</a>
+                    {% endif %}
+                    <a href="/logout/" style="padding: 10px 20px; background: #f5f5f5; color: #333; border-radius: 10px; text-decoration: none; font-weight: 600;">Logout</a>
+                {% else %}
+                    <a href="/login/" style="padding: 10px 20px; background: white; color: #667eea; border-radius: 10px; text-decoration: none; font-weight: 600;">Login</a>
+                    <a href="/signup/" style="padding: 10px 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 10px; text-decoration: none; font-weight: 600;">Sign Up</a>
+                {% endif %}
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="category-tabs">
+            <div class="tabs">
+                <button class="tab active" data-category="all">All News</button>
+                <button class="tab" data-category="technology">Technology</button>
+                <button class="tab" data-category="sports">Sports</button>
+                <button class="tab" data-category="business">Business</button>
+                <button class="tab" data-category="entertainment">Entertainment</button>
+                <button class="tab" data-category="health">Health</button>
+                <button class="tab" data-category="science">Science</button>
+                <button class="tab" data-category="world">World</button>
+            </div>
+        </div>
+
+        <div id="preferenceIndicator" style="background: white; padding: 15px 20px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1); margin-bottom: 20px; display: none;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 20px;">🎯</span>
+                <span style="color: #666; font-weight: 600;">Your Feed is Personalized for:</span>
+                <div id="preferenceList" style="display: flex; gap: 8px; flex-wrap: wrap;"></div>
+            </div>
+        </div>
+
+        <div class="content-grid">
+            <div class="news-section" id="newsSection">
+                <div class="loading">Loading news...</div>
+            </div>
+
+            <div class="sidebar">
+                <div class="sidebar-card" id="pollSection">
+                    <h3 class="sidebar-title">📊 Quick Poll</h3>
+                    <p style="margin-bottom: 15px; color: #666;">Loading poll...</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Archived News Section -->
+        <div class="news-section" id="archiveSectionMain" style="margin-top: 30px;">
+            <div class="news-card">
+                <div class="news-content">
+                    <span class="news-category">🗂️ Archived News</span>
+                    <div id="archiveList" style="margin-top: 15px; display: grid; gap: 15px;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentCategory = 'all';
+        let allNews = [];
+
+        document.addEventListener('DOMContentLoaded', function() {
+            loadNews();
+            loadPolls();
+            loadArchived();
+            setupCategoryTabs();
+            setupSearch();
+        });
+
+        function setupCategoryTabs() {
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.addEventListener('click', function() {
+                    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                    this.classList.add('active');
+                    currentCategory = this.dataset.category;
+                    loadNews();
+                });
+            });
+        }
+
+        function setupSearch() {
+            let searchTimeout;
+            document.getElementById('searchInput').addEventListener('input', function(e) {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => {
+                    loadNews(e.target.value);
+                }, 500);
+            });
+        }
+
+        async function loadNews(searchQuery = '') {
+    try {
+        const params = new URLSearchParams({
+            category: currentCategory
+        });
+        
+        if (searchQuery) {
+            params.append('search', searchQuery);
+        }
+
+        const response = await fetch(`/api/news/?${params}`);
+        const data = await response.json();
+        allNews = data.news;
+        window.userPreferences = data.user_preferences;  // Store preferences
+        displayNews(allNews);
+    } catch (error) {
+        console.error('Error loading news:', error);
+        document.getElementById('newsSection').innerHTML = '<p class="loading">Error loading news. Please refresh.</p>';
+    }
+}
+
+        function displayNews(newsArray) {
+            const newsSection = document.getElementById('newsSection');
+            const preferenceIndicator = document.getElementById('preferenceIndicator');
+            const preferenceList = document.getElementById('preferenceList');
+            
+            if (window.userPreferences && window.userPreferences.length > 0) {
+                preferenceIndicator.style.display = 'block';
+                preferenceList.innerHTML = window.userPreferences.map(cat => 
+                    `<span style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; text-transform: capitalize;">${cat}</span>`
+                ).join('');
+            }
+            
+            if (newsArray.length === 0) {
+                newsSection.innerHTML = '<p class="loading">No news found.</p>';
+                return;
+            }
+
+            newsSection.innerHTML = newsArray.map(article => `
+                <div class="news-card">
+                    <img src="${article.image}" alt="${article.title}" class="news-image" onerror="this.src='https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=800'">
+                    <div class="news-content">
+                        <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 12px;">
+                            <span class="news-category">${article.category}</span>
+                            ${article.personalized ? '<span style="background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%); color: white; padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 600;">✨ For You</span>' : ''}
+                            ${article.score > 8 ? '<span style="background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%); color: white; padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 600;">🔥 Headline</span>' : ''}
+                        </div>
+                        <h2 class="news-title">${article.title}</h2>
+                        <p class="news-description">${article.description}</p>
+                        <div class="news-meta">
+                            <span class="news-source">${article.source}</span>
+                            <span class="news-time">${article.time}</span>
+                        </div>
+                        <div class="news-actions">
+                            <button class="action-btn ${article.user_vote === 'up' ? 'upvoted' : ''}" onclick="vote(${article.id}, 'up', this)">
+                                👍 Upvote <span class="vote-count">(${article.upvotes})</span>
+                            </button>
+                            <button class="action-btn ${article.user_vote === 'down' ? 'downvoted' : ''}" onclick="vote(${article.id}, 'down', this)">
+                                👎 Downvote <span class="vote-count">(${article.downvotes})</span>
+                            </button>
+                            <button class="action-btn" onclick="toggleComments(${article.id}, this)">
+                                💬 Comment (${article.comments.length})
+                            </button>
+                        </div>
+                        <div class="comment-box" id="comments-${article.id}">
+                            <textarea class="comment-input" placeholder="Share your thoughts..." id="comment-input-${article.id}"></textarea>
+                            <button class="comment-btn" onclick="postComment(${article.id})">Post Comment</button>
+                            <div id="comment-list-${article.id}">
+                                ${article.comments.map(comment => `
+                                    <div class="comment">
+                                        <div class="comment-author">${comment.author}</div>
+                                        <div class="comment-text">${comment.text}</div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function vote(articleId, voteType, button) {
+            try {
+                const response = await fetch('/api/vote/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        article_id: articleId,
+                        vote_type: voteType
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    const card = button.closest('.news-card');
+                    const upvoteBtn = card.querySelector('.action-btn:nth-child(1)');
+                    const downvoteBtn = card.querySelector('.action-btn:nth-child(2)');
+                    
+                    upvoteBtn.querySelector('.vote-count').textContent = `(${data.upvotes})`;
+                    downvoteBtn.querySelector('.vote-count').textContent = `(${data.downvotes})`;
+                    
+                    if (voteType === 'up') {
+                        upvoteBtn.classList.add('upvoted');
+                        downvoteBtn.classList.remove('downvoted');
+                    } else {
+                        downvoteBtn.classList.add('downvoted');
+                        upvoteBtn.classList.remove('upvoted');
+                    }
+                }
+            } catch (error) {
+                console.error('Error voting:', error);
+                alert('Failed to record vote. Please try again.');
+            }
+        }
+
+        function toggleComments(articleId, button) {
+            const commentBox = document.getElementById(`comments-${articleId}`);
+            if (commentBox.style.display === 'none' || !commentBox.style.display) {
+                commentBox.style.display = 'block';
+            } else {
+                commentBox.style.display = 'none';
+            }
+        }
+
+        async function postComment(articleId) {
+            const input = document.getElementById(`comment-input-${articleId}`);
+            const text = input.value.trim();
+            
+            if (!text) {
+                alert('Please enter a comment');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/comment/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        article_id: articleId,
+                        comment: text,
+                        author_name: 'You'
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    const commentList = document.getElementById(`comment-list-${articleId}`);
+                    const newComment = document.createElement('div');
+                    newComment.className = 'comment';
+                    newComment.innerHTML = `
+                        <div class="comment-author">${data.comment.author}</div>
+                        <div class="comment-text">${data.comment.text}</div>
+                    `;
+                    commentList.insertBefore(newComment, commentList.firstChild);
+                    input.value = '';
+                }
+            } catch (error) {
+                console.error('Error posting comment:', error);
+                alert('Failed to post comment. Please try again.');
+            }
+        }
+
+        async function loadPolls() {
+            try {
+                const response = await fetch('/api/polls/');
+                const data = await response.json();
+                
+                if (data.polls && data.polls.length > 0) {
+                    const poll = data.polls[0];
+                    const pollSection = document.getElementById('pollSection');
+                    
+                    pollSection.innerHTML = `
+                        <h3 class="sidebar-title">📊 Quick Poll</h3>
+                        <p style="margin-bottom: 15px; color: #666;">${poll.question}</p>
+                        ${poll.options.map(option => `
+                            <div class="poll-option" onclick="votePoll(${option.id}, this)">
+                                <div class="poll-percentage" style="width: ${option.percentage}%"></div>
+                                <div class="poll-text">${option.text} (${option.percentage}%)</div>
+                            </div>
+                        `).join('')}
+                    `;
+                }
+            } catch (error) {
+                console.error('Error loading polls:', error);
+            }
+        }
+
+        async function votePoll(optionId, element) {
+            try {
+                const response = await fetch('/api/poll/vote/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        option_id: optionId
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    document.querySelectorAll('.poll-option').forEach(opt => opt.classList.remove('selected'));
+                    element.classList.add('selected');
+                    loadPolls();
+                }
+            } catch (error) {
+                console.error('Error voting on poll:', error);
+            }
+        }
+
+        async function loadArchived(days = 14) {
+            try {
+                const response = await fetch(`/api/archived/?days=${days}`);
+                const data = await response.json();
+                const list = document.getElementById('archiveList');
+                
+                if (!data.archived || data.archived.length === 0) {
+                    list.innerHTML = '<p style="color:#666; text-align: center; padding: 20px;">No archived news yet.</p>';
+                    return;
+                }
+                
+                list.innerHTML = data.archived.map(a => `
+                    <div style="display: flex; gap: 15px; align-items: flex-start; padding: 15px; background: #f8f9fa; border-radius: 12px; border: 1px solid #e9ecef;">
+                        <img src="${a.image || ''}" alt="${a.title}" style="width: 80px; height: 80px; object-fit: cover; border-radius: 8px; flex-shrink: 0;" onerror="this.style.display='none'">
+                        <div style="flex: 1;">
+                            <div style="font-weight: 700; color: #222; font-size: 16px; line-height: 1.3; margin-bottom: 5px;">${a.title}</div>
+                            <div style="color: #666; font-size: 14px; margin-bottom: 8px;">${a.description.substring(0, 120)}${a.description.length > 120 ? '...' : ''}</div>
+                            <div style="display: flex; gap: 15px; align-items: center; font-size: 12px; color: #888;">
+                                <span style="background: #667eea; color: white; padding: 4px 8px; border-radius: 12px; text-transform: capitalize;">${a.category}</span>
+                                <span>👍 ${a.upvotes}</span>
+                                <span>💬 ${a.comments.length}</span>
+                                <span>${a.time}</span>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (e) {
+                const list = document.getElementById('archiveList');
+                list.innerHTML = '<p style="color:#666; text-align: center; padding: 20px;">Failed to load archived news.</p>';
+            }
+        }
+    </script>
+</body>
+</html>
