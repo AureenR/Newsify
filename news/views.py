@@ -52,7 +52,11 @@ def calculate_personalized_score(article, prefs):
         credibility * 0.2 +
         category_pref * 0.2
     )
-
+def calculate_reading_time(text):
+    """Calculate reading time in minutes (avg 200 words/min)"""
+    words = len(text.split())
+    minutes = max(1, round(words / 200))
+    return minutes
 
 # -------------------- News & Feed --------------------
 
@@ -67,6 +71,7 @@ def get_news(request):
     session_id = get_or_create_session(request)
     category = request.GET.get('category', 'all')
     search_query = request.GET.get('search', '')
+    reading_time = calculate_reading_time(article.description + (article.content or ''))
 
     user_pref, _ = UserPreference.objects.get_or_create(
         session_id=session_id, defaults={'preferred_categories': {}}
@@ -139,23 +144,28 @@ def get_news(request):
         
         # Check if article is from preferred category
         is_personalized = article.category in preferences
+        # Check if trending (high engagement)
+        is_trending = article.upvotes > 50 or (article.upvotes > 20 and len(comments) > 5)
         
         news_data.append({
-            'id': article.id,
-            'title': article.title,
-            'description': article.description,
-            'category': article.category,
-            'source': article.source,
-            'time': get_relative_time(article.published_date),
-            'image': article.image_url,
-            'upvotes': article.upvotes,
-            'downvotes': article.downvotes,
-            'views': article.views,
-            'user_vote': user_votes_dict.get(article.id),
-            'comments': comments,
-            'score': round(score, 2),
-            'personalized': is_personalized
-        })
+    'id': article.id,
+    'title': article.title,
+    'description': article.description,
+    'category': article.category,
+    'source': article.source,
+    'source_url': article.source_url,  # ADD THIS LINE
+    'time': get_relative_time(article.published_date),
+    'image': article.image_url,
+    'upvotes': article.upvotes,
+    'downvotes': article.downvotes,
+    'views': article.views,
+    'user_vote': user_votes_dict.get(article.id),
+    'comments': comments,
+    'score': round(score, 2),
+    'personalized': is_personalized,
+    'trending': is_trending,
+    'reading_time': reading_time  # ADD THIS  # ADD THIS
+})
     
     return JsonResponse({
         'news': news_data,
