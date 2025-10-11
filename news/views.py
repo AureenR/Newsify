@@ -6,7 +6,7 @@ from django.contrib.auth import login, logout, authenticate
 from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.db.models import F, Q, Count, Sum
+from django.db.models import F, Q
 from .models import NewsArticle, Vote, Comment, UserPreference, Poll, UserProfile
 from .scraper import fetch_and_save_news
 from .forms import SignUpForm, OnboardingForm, ProfileUpdateForm, PreferencesUpdateForm
@@ -52,11 +52,7 @@ def calculate_personalized_score(article, prefs):
         credibility * 0.2 +
         category_pref * 0.2
     )
-def calculate_reading_time(text):
-    """Calculate reading time in minutes (avg 200 words/min)"""
-    words = len(text.split())
-    minutes = max(1, round(words / 200))
-    return minutes
+
 
 # -------------------- News & Feed --------------------
 
@@ -71,7 +67,6 @@ def get_news(request):
     session_id = get_or_create_session(request)
     category = request.GET.get('category', 'all')
     search_query = request.GET.get('search', '')
-    reading_time = calculate_reading_time(article.description + (article.content or ''))
 
     user_pref, _ = UserPreference.objects.get_or_create(
         session_id=session_id, defaults={'preferred_categories': {}}
@@ -87,52 +82,31 @@ def get_news(request):
     else:
         preferences = user_pref.preferred_categories
 
-    # Get articles based on category
-    if category == 'all':
-        # For "All News", prioritize headlines (high votes/comments) then regular news
-        from django.db.models import Count
-        
-        # Get top headlines first (articles with most votes and comments)
-        headlines = NewsArticle.objects.annotate(
-            comment_count=Count('comments'),
-            total_engagement=F('upvotes') + F('downvotes') + Count('comments')
-        ).order_by('-total_engagement', '-upvotes', '-published_date')[:10]
-        
-        # Get regular news from all categories (excluding already selected headlines)
-        headline_ids = [h.id for h in headlines]
-        regular_news = NewsArticle.objects.exclude(id__in=headline_ids).order_by('-published_date')[:20]
-        
-        # Combine: headlines first, then regular news
-        articles = list(headlines) + list(regular_news)
-    else:
-        # For specific categories, filter by category
-        articles = NewsArticle.objects.filter(category=category).order_by('-published_date')
-    
-    # Apply search filter if provided
+    articles = NewsArticle.objects.all()
+    if category != 'all':
+        articles = articles.filter(category=category)
     if search_query:
         articles = articles.filter(
             Q(title__icontains=search_query) | Q(description__icontains=search_query)
         )
 
-    # Calculate personalized scores
+    # Calculate scores
     articles_with_scores = [
         (a, calculate_personalized_score(a, preferences))
         for a in articles
     ]
-    
-    # Sort by score
     articles_with_scores.sort(key=lambda x: x[1], reverse=True)
-    
+
     # Get user votes
     user_votes = Vote.objects.filter(
         session_id=session_id,
         article__in=[a[0] for a in articles_with_scores]
     ).values('article_id', 'vote_type')
     user_votes_dict = {v['article_id']: v['vote_type'] for v in user_votes}
-    
-    # Prepare response data
+
+    # Prepare data
     news_data = []
-    for article, score in articles_with_scores[:20]:  # Top 20 articles
+    for article, score in articles_with_scores[:20]:
         comments = [
             {
                 'author': c.author_name,
@@ -141,37 +115,24 @@ def get_news(request):
             }
             for c in article.comments.all()[:5]
         ]
-        
-        # Check if article is from preferred category
-        is_personalized = article.category in preferences
-        # Check if trending (high engagement)
-        is_trending = article.upvotes > 50 or (article.upvotes > 20 and len(comments) > 5)
-        
         news_data.append({
-    'id': article.id,
-    'title': article.title,
-    'description': article.description,
-    'category': article.category,
-    'source': article.source,
-    'source_url': article.source_url,  # ADD THIS LINE
-    'time': get_relative_time(article.published_date),
-    'image': article.image_url,
-    'upvotes': article.upvotes,
-    'downvotes': article.downvotes,
-    'views': article.views,
-    'user_vote': user_votes_dict.get(article.id),
-    'comments': comments,
-    'score': round(score, 2),
-    'personalized': is_personalized,
-    'trending': is_trending,
-    'reading_time': reading_time  # ADD THIS  # ADD THIS
-})
-    
-    return JsonResponse({
-        'news': news_data,
-        'user_preferences': list(preferences.keys()),
-        'total_articles': len(news_data)
-    })
+            'id': article.id,
+            'title': article.title,
+            'description': article.description,
+            'category': article.category,
+            'source': article.source,
+            'time': get_relative_time(article.published_date),
+            'image': article.image_url,
+            'upvotes': article.upvotes,
+            'downvotes': article.downvotes,
+            'views': article.views,
+            'user_vote': user_votes_dict.get(article.id),
+            'comments': comments,
+            'score': round(score, 2)
+        })
+
+    return JsonResponse({'news': news_data})
+
 
 # -------------------- Voting & Comments --------------------
 
@@ -197,65 +158,33 @@ def vote_article(request):
                 else:
                     article.downvotes = F('downvotes') - 1
                 article.save()
-                # Update profile stats if authenticated
-                if request.user.is_authenticated:
-                    prof = request.user.profile
-                    if vote_type == 'up':
-                        prof.total_upvotes = F('total_upvotes') - 1
-                    else:
-                        prof.total_downvotes = F('total_downvotes') - 1
-                    prof.save()
-                    prof.refresh_from_db()
                 existing_vote.delete()
                 article.refresh_from_db()
                 return JsonResponse({'status': 'success', 'upvotes': article.upvotes, 'downvotes': article.downvotes})
             else:
-                # Change vote
+                # Changing vote type
                 if old == 'up':
                     article.upvotes = F('upvotes') - 1
                     article.downvotes = F('downvotes') + 1
                 else:
                     article.downvotes = F('downvotes') - 1
                     article.upvotes = F('upvotes') + 1
-                article.save()
                 existing_vote.vote_type = vote_type
                 existing_vote.save()
-                if request.user.is_authenticated:
-                    prof = request.user.profile
-                    if vote_type == 'up':
-                        prof.total_upvotes = F('total_upvotes') + 1
-                        prof.total_downvotes = F('total_downvotes') - 1
-                    else:
-                        prof.total_downvotes = F('total_downvotes') + 1
-                        prof.total_upvotes = F('total_upvotes') - 1
-                    prof.save()
-                    prof.refresh_from_db()
-                article.refresh_from_db()
-                return JsonResponse({'status': 'success', 'upvotes': article.upvotes, 'downvotes': article.downvotes})
         else:
-            # New vote
             Vote.objects.create(article=article, session_id=session_id, vote_type=vote_type)
             if vote_type == 'up':
                 article.upvotes = F('upvotes') + 1
             else:
                 article.downvotes = F('downvotes') + 1
-            article.save()
-            article.refresh_from_db()
-            update_user_preferences(session_id, article.category, 1)
-            if request.user.is_authenticated:
-                prof = request.user.profile
-                if vote_type == 'up':
-                    prof.total_upvotes = F('total_upvotes') + 1
-                else:
-                    prof.total_downvotes = F('total_downvotes') + 1
-                prof.save()
-                prof.refresh_from_db()
-            return JsonResponse({'status': 'success', 'upvotes': article.upvotes, 'downvotes': article.downvotes})
 
-    except NewsArticle.DoesNotExist:
-        return JsonResponse({'status': 'error', 'message': 'Article not found'})
+        article.save()
+        article.refresh_from_db()
+        return JsonResponse({'status': 'success', 'upvotes': article.upvotes, 'downvotes': article.downvotes})
+
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': str(e)})
+
 
 
 def update_user_preferences(session_id, category, weight):
@@ -286,11 +215,6 @@ def add_comment(request):
             text=data['comment']
         )
         update_user_preferences(get_or_create_session(request), article.category, 0.5)
-        if request.user.is_authenticated:
-            prof = request.user.profile
-            prof.total_comments = F('total_comments') + 1
-            prof.save()
-            prof.refresh_from_db()
         return JsonResponse({
             'status': 'success',
             'comment': {
@@ -349,7 +273,11 @@ def dashboard(request):
 
 def get_stats(request):
     from .models import PollOption
-    total_poll_votes = PollOption.objects.all().aggregate(total=Sum('votes'))['total'] or 0
+    total_poll_votes = 0
+    try:
+        total_poll_votes = PollOption.objects.all().aggregate(total=__import__('django').db.models.Sum('votes'))['total'] or 0
+    except Exception:
+        total_poll_votes = 0
 
     stats = {
         'total_articles': NewsArticle.objects.count(),
@@ -366,77 +294,6 @@ def get_stats(request):
         }
     }
     return JsonResponse(stats)
-
-
-# -------------------- Headlines & Archive --------------------
-
-def get_headlines(request):
-    """Top articles by votes and comments"""
-    articles = (
-        NewsArticle.objects
-        .annotate(comment_count=Count('comments'))
-        .order_by(F('upvotes').desc(), F('comment_count').desc(), F('published_date').desc())[:10]
-    )
-
-    news_data = []
-    for article in articles:
-        comments = [
-            {
-                'author': c.author_name,
-                'text': c.text,
-                'created_at': c.created_at.strftime('%Y-%m-%d %H:%M')
-            }
-            for c in article.comments.all()[:5]
-        ]
-        news_data.append({
-            'id': article.id,
-            'title': article.title,
-            'description': article.description,
-            'category': article.category,
-            'source': article.source,
-            'time': get_relative_time(article.published_date),
-            'image': article.image_url,
-            'upvotes': article.upvotes,
-            'downvotes': article.downvotes,
-            'views': article.views,
-            'score': article.upvotes + int(getattr(article, 'comment_count', 0)),
-            'comments': comments,
-        })
-
-    return JsonResponse({'headlines': news_data})
-
-
-def get_archived(request):
-    """Return older news (e.g., older than 14 days)"""
-    cutoff_days = int(request.GET.get('days', 14))
-    cutoff = timezone.now() - timedelta(days=cutoff_days)
-    articles = NewsArticle.objects.filter(published_date__lt=cutoff).order_by('-published_date')[:20]
-
-    news_data = []
-    for article in articles:
-        comments = [
-            {
-                'author': c.author_name,
-                'text': c.text,
-                'created_at': c.created_at.strftime('%Y-%m-%d %H:%M')
-            }
-            for c in article.comments.all()[:5]
-        ]
-        news_data.append({
-            'id': article.id,
-            'title': article.title,
-            'description': article.description,
-            'category': article.category,
-            'source': article.source,
-            'time': get_relative_time(article.published_date),
-            'image': article.image_url,
-            'upvotes': article.upvotes,
-            'downvotes': article.downvotes,
-            'views': article.views,
-            'comments': comments,
-        })
-
-    return JsonResponse({'archived': news_data, 'cutoff_days': cutoff_days})
 
 
 # -------------------- User Dashboard --------------------
@@ -506,31 +363,6 @@ def login_view(request):
         
         if user is not None:
             login(request, user)
-
-            # Merge session preferences into profile on login
-            try:
-                session_id = get_or_create_session(request)
-                session_pref = UserPreference.objects.filter(session_id=session_id).first()
-                profile = user.profile
-                if session_pref:
-                    # Normalize profile prefs to dict
-                    if isinstance(profile.preferred_categories, list):
-                        profile_prefs = {cat: 5.0 for cat in profile.preferred_categories}
-                    else:
-                        profile_prefs = dict(profile.preferred_categories or {})
-
-                    merged = dict(profile_prefs)
-                    for cat, score in (session_pref.preferred_categories or {}).items():
-                        base = merged.get(cat, 5.0)
-                        try:
-                            merged[cat] = round(min(10.0, max(0.0, (float(base) + float(score)) / 2.0)), 2)
-                        except Exception:
-                            merged[cat] = base
-
-                    profile.preferred_categories = merged
-                    profile.save()
-            except Exception:
-                pass
             
             # Check if onboarding is complete
             if not user.profile.onboarding_complete:

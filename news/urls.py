@@ -1,3 +1,5 @@
+# news/urls.py (Corrected)
+
 from django.urls import path
 from . import views
 
@@ -27,6 +29,10 @@ urlpatterns = [
     path('api/stats/', views.get_stats, name='get_stats'),
     path('api/user-stats/', views.get_user_stats_auth, name='get_user_stats_auth'),
     path('api/refresh-news/', views.refresh_news, name='refresh_news'),
-    path('api/headlines/', views.get_headlines, name='get_headlines'),
-    path('api/archived/', views.get_archived, name='get_archived'),
+    
+    # CORRECTED: Changed views.get_headlines to the existing views.get_news
+    path('api/headlines/', views.get_news, name='get_headlines'), 
+    
+    # REMOVED: views.get_archived is missing from views.py. Remove it or add the function.
+    # path('api/archived/', views.get_archived, name='get_archived'),
 ]
