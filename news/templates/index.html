@@ -165,8 +165,8 @@
                 transform: translateY(20px);
             }
             to {
-                opacity: 1;
                 transform: translateY(0);
+                opacity: 1;
             }
         }
 
@@ -426,6 +426,18 @@
         opacity: 1;
     }
 }
+        /* Style for the temporary 'New' tag */
+        .new-article-tag {
+            background: linear-gradient(135deg, #4CAF50 0%, #388E3C 100%);
+            color: white;
+            padding: 4px 10px;
+            border-radius: 15px;
+            font-size: 11px;
+            font-weight: 700;
+            margin-left: 10px;
+            transition: opacity 0.5s;
+        }
+
 
         @media (max-width: 1024px) {
             .content-grid {
@@ -476,6 +488,26 @@
                     <a href="/login/" style="padding: 10px 20px; background: white; color: #667eea; border-radius: 10px; text-decoration: none; font-weight: 600;">Login</a>
                     <a href="/signup/" style="padding: 10px 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 10px; text-decoration: none; font-weight: 600;">Sign Up</a>
                 {% endif %}
+                
+                <button id="refreshButton" style="padding: 10px 20px; background: white; color: #333; border: 1px solid #e0e0e0; border-radius: 10px; text-decoration: none; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                    <span id="refreshIcon">🔄</span>
+                    <span id="refreshText">Refresh News</span>
+                </button>
+                
+                <!-- This tag is now decorative/unused as a simple flag, but kept for structural integrity if needed later -->
+                <span id="refreshSuccessTag" style="
+                    display: none;
+                    background: linear-gradient(135deg, #4CAF50 0%, #388E3C 100%);
+                    color: white;
+                    padding: 8px 12px;
+                    border-radius: 8px;
+                    font-weight: 600;
+                    font-size: 13px;
+                    opacity: 0;
+                    transition: opacity 0.5s;
+                ">
+                    ✓ Updated!
+                </span>
             </div>
         </div>
     </header>
@@ -538,7 +570,88 @@
             loadArchived();
             setupCategoryTabs();
             setupSearch();
+            setupRefreshButton();
         });
+        
+        function setupRefreshButton() {
+            document.getElementById('refreshButton').addEventListener('click', handleManualRefresh);
+        }
+        
+        // Helper function to dynamically add the temporary tag
+        function applyNewNewsTag(articleElement, duration = 5000) {
+            // Find the wrapper containing the category and tags
+            const wrapper = articleElement.querySelector('.news-content > div:first-child');
+            if (wrapper) {
+                 const newTag = document.createElement('span');
+                 newTag.className = 'new-article-tag';
+                 newTag.textContent = 'NEWLY ADDED';
+                 newTag.style.opacity = '1';
+                 
+                 // Insert the tag after the category and existing tags
+                 wrapper.appendChild(newTag);
+
+                 // Set timeout to remove the tag after the duration
+                 setTimeout(() => {
+                     newTag.style.opacity = '0';
+                     setTimeout(() => newTag.remove(), 500); // Remove after fade out
+                 }, duration);
+            }
+        }
+
+        // IMPLEMENTATION: Function to handle the manual button click with visual feedback
+        async function handleManualRefresh() {
+            const button = document.getElementById('refreshButton');
+            const icon = document.getElementById('refreshIcon');
+            const text = document.getElementById('refreshText');
+            
+            button.disabled = true;
+            icon.innerHTML = '<span style="animation: spin 1s linear infinite;">↻</span>';
+            text.textContent = 'Refreshing...';
+
+            try {
+                // 1. Call the public news refresh API endpoint
+                const response = await fetch('/api/refresh-news-public/');
+                
+                const data = await response.json(); 
+                
+                if (response.ok) { 
+                    const savedCount = data.total_saved || 0;
+                    
+                    // 2. Reload data first to get new articles into the DOM
+                    // We must await loadNews to ensure the new articles are in the DOM
+                    await loadNews(); 
+                    await loadArchived();
+                    
+                    if (savedCount > 0) {
+                        // 3. Highlight the top 'savedCount' articles as newly added
+                        const articles = document.querySelectorAll('#newsSection .news-card');
+                        
+                        // Only apply tag to the first 'savedCount' elements
+                        for (let i = 0; i < Math.min(savedCount, articles.length); i++) {
+                            applyNewNewsTag(articles[i]);
+                        }
+                        
+                        showToast(`Refreshed! Found ${savedCount} new articles.`, 'success');
+                    } else {
+                        showToast(`Refreshed! No new articles found.`, 'success');
+                    }
+                    
+                } else if (response.status === 429) {
+                    showToast(`Refresh failed: ${data.message}`, 'error');
+                } else {
+                    showToast(data.message || 'Refresh failed. Please try again later.', 'error');
+                }
+            } catch (error) {
+                console.error('Manual refresh failed:', error);
+                showToast('Network error during refresh.', 'error');
+            } finally {
+                // Restore button state
+                icon.textContent = '🔄';
+                text.textContent = 'Refresh News';
+                button.disabled = false;
+            }
+        }
+
 
         function setupCategoryTabs() {
             document.querySelectorAll('.tab').forEach(tab => {
@@ -561,7 +674,7 @@
             });
         }
         
-        // --- NEW HELPER FUNCTION FOR SECURITY (CSRF) ---
+        // --- HELPER FUNCTION FOR SECURITY (CSRF) ---
         function getCsrfToken() {
             const name = 'csrftoken';
             const cookieValue = document.cookie.split(';')
@@ -605,6 +718,8 @@
                 preferenceList.innerHTML = window.userPreferences.map(cat => 
                     `<span style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; text-transform: capitalize;">${cat}</span>`
                 ).join('');
+            } else {
+                 preferenceIndicator.style.display = 'none';
             }
             
             if (newsArray.length === 0) {
@@ -727,8 +842,7 @@
                     },
                     body: JSON.stringify({
                         article_id: articleId,
-                        comment: text,
-                        // FIX: Removed hardcoded author_name, now handled by the server
+                        text: text, 
                     })
                 });
 

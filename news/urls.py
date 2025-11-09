@@ -1,4 +1,4 @@
-# news/urls.py (Corrected)
+# news/urls.py
 
 from django.urls import path
 from . import views
@@ -22,17 +22,19 @@ urlpatterns = [
     
     # API endpoints
     path('api/news/', views.get_news, name='get_news'),
+    path('api/archived/', views.get_archived, name='get_archived'),
     path('api/vote/', views.vote_article, name='vote_article'),
     path('api/comment/', views.add_comment, name='add_comment'),
     path('api/polls/', views.get_polls, name='get_polls'),
     path('api/poll/vote/', views.vote_poll, name='vote_poll'),
     path('api/stats/', views.get_stats, name='get_stats'),
     path('api/user-stats/', views.get_user_stats_auth, name='get_user_stats_auth'),
+    
+    # Public refresh endpoint (no admin required)
+    path('api/refresh-news-public/', views.refresh_news_public, name='refresh_news_public'),
+    
+    # Keep admin one separate
     path('api/refresh-news/', views.refresh_news, name='refresh_news'),
     
-    # CORRECTED: Changed views.get_headlines to the existing views.get_news
     path('api/headlines/', views.get_news, name='get_headlines'), 
-    
-    # REMOVED: views.get_archived is missing from views.py. Remove it or add the function.
-    # path('api/archived/', views.get_archived, name='get_archived'),
 ]
