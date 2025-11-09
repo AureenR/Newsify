@@ -560,6 +560,19 @@
                 }, 500);
             });
         }
+        
+        // --- NEW HELPER FUNCTION FOR SECURITY (CSRF) ---
+        function getCsrfToken() {
+            const name = 'csrftoken';
+            const cookieValue = document.cookie.split(';')
+                .map(c => c.trim())
+                .find(cookie => cookie.startsWith(name + '='));
+            if (cookieValue) {
+                return cookieValue.substring(name.length + 1);
+            }
+            return null;
+        }
+        // ------------------------------------------------
 
         async function loadNews(searchQuery = '') {
     try {
@@ -599,6 +612,7 @@
                 return;
             }
 
+            // --- The Fix: The backend now correctly includes 'source_url' (views.py). This template uses it correctly. ---
             newsSection.innerHTML = newsArray.map(article => `
                 <div class="news-card">
                     <img src="${article.image}" alt="${article.title}" class="news-image" onerror="this.src='https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=800'">
@@ -646,11 +660,13 @@
         }
 
         async function vote(articleId, voteType, button) {
+            const csrfToken = getCsrfToken(); // <--- Included CSRF Token
             try {
                 const response = await fetch('/api/vote/', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken // <--- Sent CSRF Token
                     },
                     body: JSON.stringify({
                         article_id: articleId,
@@ -695,6 +711,7 @@
         async function postComment(articleId) {
             const input = document.getElementById(`comment-input-${articleId}`);
             const text = input.value.trim();
+            const csrfToken = getCsrfToken(); // <--- Included CSRF Token
             
             if (!text) {
                 alert('Please enter a comment');
@@ -706,11 +723,12 @@
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken // <--- Sent CSRF Token
                     },
                     body: JSON.stringify({
                         article_id: articleId,
                         comment: text,
-                        author_name: 'You'
+                        // FIX: Removed hardcoded author_name, now handled by the server
                     })
                 });
 
@@ -760,11 +778,13 @@
         }
 
         async function votePoll(optionId, element) {
+            const csrfToken = getCsrfToken(); // <--- Included CSRF Token
             try {
                 const response = await fetch('/api/poll/vote/', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken // <--- Sent CSRF Token
                     },
                     body: JSON.stringify({
                         option_id: optionId

@@ -6,7 +6,7 @@ from django.contrib.auth import login, logout, authenticate
 from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.db.models import F, Q
+from django.db.models import F, Q, Count, Sum # Note: Added Count and Sum for new API functions
 from .models import NewsArticle, Vote, Comment, UserPreference, Poll, UserProfile
 from .scraper import fetch_and_save_news
 from .forms import SignUpForm, OnboardingForm, ProfileUpdateForm, PreferencesUpdateForm
@@ -53,6 +53,11 @@ def calculate_personalized_score(article, prefs):
         category_pref * 0.2
     )
 
+def calculate_reading_time(text):
+    """Calculate reading time in minutes (avg 200 words/min)"""
+    words = len(text.split())
+    minutes = max(1, round(words / 200))
+    return minutes
 
 # -------------------- News & Feed --------------------
 
@@ -82,13 +87,20 @@ def get_news(request):
     else:
         preferences = user_pref.preferred_categories
 
-    articles = NewsArticle.objects.all()
-    if category != 'all':
-        articles = articles.filter(category=category)
+    # --- N+1 FIX and Article Selection ---
+    if category == 'all':
+        # Fetch articles with prefetch_related('comments') to solve N+1
+        articles_qs = NewsArticle.objects.all().prefetch_related('comments')
+    else:
+        articles_qs = NewsArticle.objects.filter(category=category).prefetch_related('comments')
+    # -------------------------------------
+
     if search_query:
-        articles = articles.filter(
+        articles_qs = articles_qs.filter(
             Q(title__icontains=search_query) | Q(description__icontains=search_query)
         )
+    
+    articles = list(articles_qs)
 
     # Calculate scores
     articles_with_scores = [
@@ -107,6 +119,7 @@ def get_news(request):
     # Prepare data
     news_data = []
     for article, score in articles_with_scores[:20]:
+        # Comments are efficiently retrieved due to prefetch_related
         comments = [
             {
                 'author': c.author_name,
@@ -115,12 +128,18 @@ def get_news(request):
             }
             for c in article.comments.all()[:5]
         ]
+        
+        reading_time = calculate_reading_time(article.description + (article.content or ''))
+        is_personalized = article.category in preferences
+        is_trending = article.upvotes > 50 or (article.upvotes > 20 and len(comments) > 5)
+
         news_data.append({
             'id': article.id,
             'title': article.title,
             'description': article.description,
             'category': article.category,
             'source': article.source,
+            'source_url': article.source_url,  # <--- FIX: Added source_url to response data
             'time': get_relative_time(article.published_date),
             'image': article.image_url,
             'upvotes': article.upvotes,
@@ -128,10 +147,13 @@ def get_news(request):
             'views': article.views,
             'user_vote': user_votes_dict.get(article.id),
             'comments': comments,
-            'score': round(score, 2)
+            'score': round(score, 2),
+            'reading_time': reading_time,
+            'personalized': is_personalized,
+            'trending': is_trending,
         })
 
-    return JsonResponse({'news': news_data})
+    return JsonResponse({'news': news_data, 'user_preferences': list(preferences.keys())})
 
 
 # -------------------- Voting & Comments --------------------
@@ -208,17 +230,27 @@ def add_comment(request):
     try:
         data = json.loads(request.body)
         article = NewsArticle.objects.get(id=data['article_id'])
+        
+        # --- FIX: Determine the true author name based on authentication ---
+        if request.user.is_authenticated:
+            # Use first name if available, otherwise use username
+            author_name = request.user.first_name or request.user.username
+        else:
+            # Fallback for anonymous users
+            author_name = 'Anonymous'
+        # -----------------------------------------------------------------
+        
         comment = Comment.objects.create(
             article=article,
             session_id=get_or_create_session(request),
-            author_name=data.get('author_name', 'Anonymous'),
+            author_name=author_name, # Use the determined name
             text=data['comment']
         )
         update_user_preferences(get_or_create_session(request), article.category, 0.5)
         return JsonResponse({
             'status': 'success',
             'comment': {
-                'author': comment.author_name,
+                'author': comment.author_name, # Return the correct name
                 'text': comment.text,
                 'created_at': comment.created_at.strftime('%Y-%m-%d %H:%M')
             }
