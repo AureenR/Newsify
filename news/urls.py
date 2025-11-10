@@ -6,6 +6,7 @@ from . import views
 urlpatterns = [
     # Public pages
     path('', views.index, name='index'),
+    path('set-password/', views.set_initial_password_view, name='set_initial_password'),
     
     # Authentication
     path('signup/', views.signup_view, name='signup'),

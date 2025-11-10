@@ -2,15 +2,21 @@ from django.shortcuts import render, redirect
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.admin.views.decorators import staff_member_required
-from django.contrib.auth import login, logout, authenticate
+from django.contrib.auth import login, logout, authenticate, update_session_auth_hash
 from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db.models import F, Q, Count, Sum
-from django.db.models.functions import Coalesce 
-from .models import NewsArticle, Vote, Comment, UserPreference, Poll, UserProfile, PollOption 
+from django.db.models.functions import Coalesce
+from .models import NewsArticle, Vote, Comment, UserPreference, Poll, UserProfile, PollOption
 from .scraper import fetch_and_save_news
-from .forms import SignUpForm, OnboardingForm, ProfileUpdateForm, PreferencesUpdateForm
+from .forms import (
+    SignUpForm,
+    OnboardingForm,
+    ProfileUpdateForm,
+    PreferencesUpdateForm,
+    SetInitialPasswordForm,
+)
 import json
 from datetime import timedelta
 from django.utils import timezone
@@ -47,10 +53,10 @@ def calculate_personalized_score(article, prefs):
     credibility = article.credibility_score
     category_pref = prefs.get(article.category, 5)
     return (
-        recency * 0.3 +
-        engagement * 0.3 +
-        credibility * 0.2 +
-        category_pref * 0.2
+        recency * 0.3
+        + engagement * 0.3
+        + credibility * 0.2
+        + category_pref * 0.2
     )
 
 
@@ -63,54 +69,73 @@ def calculate_reading_time(text):
 # ==================== Public Pages ====================
 
 def index(request):
-    """Homepage view"""
+    """Homepage view (Redirects to password setup if onboarding is incomplete)"""
+    if request.user.is_authenticated and not request.user.profile.onboarding_complete:
+        return redirect('set_initial_password') # Enforcing mandatory password step
+
     if request.user.is_authenticated:
         return render(request, 'index.html')
     return render(request, 'landing.html')
 
-
 # ==================== Authentication ====================
 
 def signup_view(request):
-    """User signup"""
+    """User signup with redirect to password setup"""
     if request.user.is_authenticated:
-        return redirect('onboarding')
+        if not request.user.profile.onboarding_complete:
+            return redirect('set_initial_password')
+        return redirect('index')
 
     if request.method == 'POST':
         form = SignUpForm(request.POST)
         if form.is_valid():
             user = form.save()
             login(request, user)
-            messages.success(request, 'Account created successfully!')
-            return redirect('onboarding')
+            messages.info(request, 'Account created! Please set your new password.')
+            return redirect('set_initial_password') # Mandatory password step
         else:
             messages.error(request, 'Please correct the errors below.')
     else:
         form = SignUpForm()
-    
+
     return render(request, 'signup.html', {'form': form})
 
 
 def login_view(request):
-    """User login"""
+    """User login (username/email) + password setup check"""
     if request.user.is_authenticated:
+        if not request.user.profile.onboarding_complete:
+            return redirect('set_initial_password') # Enforcing mandatory password step
         return redirect('index')
 
     if request.method == 'POST':
-        username = request.POST.get('username')
+        identifier = request.POST.get('username')
         password = request.POST.get('password')
-        user = authenticate(request, username=username, password=password)
-        
+
+        user = authenticate(request, username=identifier, password=password)
+
+        # Allow login via email if username fails
+        if user is None and '@' in identifier:
+            try:
+                user_by_email = User.objects.get(email__iexact=identifier)
+                user = authenticate(
+                    request, username=user_by_email.username, password=password
+                )
+            except User.DoesNotExist:
+                pass
+
         if user is not None:
             login(request, user)
-            
             if not user.profile.onboarding_complete:
-                return redirect('onboarding')
+                messages.info(
+                    request, 'Welcome! Please set your permanent password to continue.'
+                )
+                return redirect('set_initial_password') # Enforcing mandatory password step
             messages.success(request, f'Welcome back, {user.username}!')
             return redirect('index')
         else:
             messages.error(request, 'Invalid username or password.')
-    
+
     return render(request, 'login.html')
 
 
@@ -122,9 +147,40 @@ def logout_view(request):
 
 
 @login_required
+def set_initial_password_view(request):
+    """Force newly registered users to set a permanent password"""
+    if request.user.profile.onboarding_complete:
+        messages.info(request, 'Your password is already set.')
+        return redirect('index')
+
+    if request.method == 'POST':
+        form = SetInitialPasswordForm(request.user, request.POST)
+        if form.is_valid():
+            user = form.save()
+            update_session_auth_hash(request, user)
+            messages.success(request, "Password set successfully! Let's personalize your feed.")
+            return redirect('onboarding') # Redirect to onboarding next
+        else:
+            messages.error(request, 'Please correct the errors below.')
+    else:
+        form = SetInitialPasswordForm(request.user)
+
+    context = {'form': form, 'title': 'Set Your Permanent Password'}
+    return render(request, 'set_initial_password.html', context)
+
+
+@login_required
 def onboarding_view(request):
     """Onboarding for new users"""
     profile = request.user.profile
+
+    # Check if the mandatory password step was completed first
+    if not profile.onboarding_complete:
+        messages.warning(
+            request, 'Please set your permanent password before choosing preferences.'
+        )
+        return redirect('set_initial_password') # Redirect back to password setup
+
     if profile.onboarding_complete:
         messages.info(request, 'You have already completed onboarding.')
         return redirect('index')
@@ -135,26 +191,30 @@ def onboarding_view(request):
             profile = form.save(commit=False)
             profile.onboarding_complete = True
             profile.save()
-
-            messages.success(request, 'Preferences saved! Your feed is now personalized.')
+            messages.success(
+                request, 'Preferences saved! Your feed is now personalized.'
+            )
             return redirect('index')
         else:
             messages.error(request, 'Please correct the errors below.')
     else:
         form = OnboardingForm(instance=profile)
-    
-    return render(request, 'onboarding.html', {'form': form})
 
+    return render(request, 'onboarding.html', {'form': form})
 
 # ==================== User Pages ====================
 
 @login_required
 def profile_view(request):
     """User profile page"""
+    if not request.user.profile.onboarding_complete:
+        messages.warning(request, 'Please complete the setup process first.')
+        return redirect('set_initial_password') # Enforcing mandatory password step
+
     if request.method == 'POST':
         user_form = ProfileUpdateForm(request.POST, instance=request.user)
         prefs_form = PreferencesUpdateForm(request.POST, instance=request.user.profile)
-        
+
         if user_form.is_valid() and prefs_form.is_valid():
             user_form.save()
             prefs_form.save()
@@ -163,11 +223,11 @@ def profile_view(request):
     else:
         user_form = ProfileUpdateForm(instance=request.user)
         prefs_form = PreferencesUpdateForm(instance=request.user.profile)
-    
+
     context = {
         'profile_form': user_form,
         'prefs_form': prefs_form,
-        'user': request.user
+        'user': request.user,
     }
     return render(request, 'profile.html', context)
 
@@ -175,23 +235,23 @@ def profile_view(request):
 @login_required
 def user_dashboard_auth(request):
     """User activity dashboard"""
+    if not request.user.profile.onboarding_complete:
+        messages.warning(request, 'Please complete the setup process first.')
+        return redirect('set_initial_password') # Enforcing mandatory password step
+
     session_id = get_or_create_session(request)
-    
-    # Get user's votes
     user_votes = Vote.objects.filter(session_id=session_id).select_related('article')
-    
-    # Get user's comments
-    user_comments = Comment.objects.filter(author_name=request.user.username).select_related('article')
-    
+    user_comments = Comment.objects.filter(
+        author_name=request.user.username
+    ).select_related('article')
+
     context = {
         'votes': user_votes,
         'comments': user_comments,
         'total_votes': user_votes.count(),
-        'total_comments': user_comments.count()
+        'total_comments': user_comments.count(),
     }
-    
     return render(request, 'user_dashboard.html', context)
-
 
 # ==================== API Endpoints ====================
 
@@ -218,7 +278,7 @@ def get_news(request):
     else:
         preferences = user_pref.preferred_categories
 
-    # Fetch articles with prefetch_related to avoid N+1 queries
+    # Fetch articles
     if category == 'all':
         articles_qs = NewsArticle.objects.all().prefetch_related('comments').order_by('-published_date')
     else:
@@ -228,13 +288,12 @@ def get_news(request):
         articles_qs = articles_qs.filter(
             Q(title__icontains=search_query) | Q(description__icontains=search_query)
         )
-    
-    articles = list(articles_qs[:100])  # Limit to 100 articles for performance
 
-    # Calculate scores
+    articles = list(articles_qs[:100])  # Limit to 100
+
+    # Calculate personalized scores
     articles_with_scores = [
-        (a, calculate_personalized_score(a, preferences))
-        for a in articles
+        (a, calculate_personalized_score(a, preferences)) for a in articles
     ]
     articles_with_scores.sort(key=lambda x: x[1], reverse=True)
 
@@ -247,16 +306,16 @@ def get_news(request):
 
     # Prepare data
     news_data = []
-    for article, score in articles_with_scores[:50]:  # Return top 50
+    for article, score in articles_with_scores[:50]:
         comments = [
             {
                 'author': c.author_name,
                 'text': c.text,
-                'created_at': c.created_at.strftime('%Y-%m-%d %H:%M')
+                'created_at': c.created_at.strftime('%Y-%m-%d %H:%M'),
             }
             for c in article.comments.all()[:5]
         ]
-        
+
         reading_time = calculate_reading_time(article.description + (article.content or ''))
         is_personalized = article.category in preferences
         is_trending = article.upvotes > 50 or (article.upvotes > 20 and len(comments) > 5)
@@ -286,39 +345,40 @@ def get_news(request):
 
 def get_archived(request):
     """Fetch old, highly-engaged news (archived)"""
-    # Get parameters from request, defaulting to check for news older than 7 days
     days = int(request.GET.get('days', 7))
     min_upvotes = 5
     min_views = 50
 
     cutoff_date = timezone.now() - timedelta(days=days)
 
-    # Query articles older than cutoff, with minimum engagement, sorted by score
-    archived_articles = NewsArticle.objects.filter(
-        published_date__lt=cutoff_date,  # Older than cutoff
-        upvotes__gt=min_upvotes,         # Minimum upvotes
-        views__gt=min_views              # Minimum views
-    ).annotate(
-        # Calculate a simple engagement score based on votes and comments
-        engagement=F('upvotes') + F('views') + Count('comments') 
-    ).order_by('-engagement')[:10].prefetch_related('comments') # Top 10 most engaging old news
+    archived_articles = (
+        NewsArticle.objects.filter(
+            published_date__lt=cutoff_date,
+            upvotes__gt=min_upvotes,
+            views__gt=min_views
+        )
+        .annotate(engagement=F('upvotes') + F('views') + Count('comments'))
+        .order_by('-engagement')[:10]
+        .prefetch_related('comments')
+    )
 
-    archived_data = []
-    for article in archived_articles:
-        archived_data.append({
-            'id': article.id,
-            'title': article.title,
-            'description': article.description,
-            'category': article.category,
-            'source': article.source,
-            'source_url': article.source_url,
-            'time': get_relative_time(article.published_date),
-            'image': article.image_url,
-            'upvotes': article.upvotes,
-            'downvotes': article.downvotes,
-            'views': article.views,
-            'comments': [{'id': c.id} for c in article.comments.all()],
-        })
+    archived_data = [
+        {
+            'id': a.id,
+            'title': a.title,
+            'description': a.description,
+            'category': a.category,
+            'source': a.source,
+            'source_url': a.source_url,
+            'time': get_relative_time(a.published_date),
+            'image': a.image_url,
+            'upvotes': a.upvotes,
+            'downvotes': a.downvotes,
+            'views': a.views,
+            'comments': [{'id': c.id} for c in a.comments.all()],
+        }
+        for a in archived_articles
+    ]
 
     return JsonResponse({'archived': archived_data})
 
@@ -326,181 +386,152 @@ def get_archived(request):
 @csrf_exempt
 def vote_article(request):
     """Handle upvote/downvote"""
-    if request.method == 'POST':
-        data = json.loads(request.body)
-        article_id = data.get('article_id')
-        vote_type = data.get('vote_type')
-        session_id = get_or_create_session(request)
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'Invalid request'}, status=400)
 
-        try:
-            article = NewsArticle.objects.get(id=article_id)
-            vote_obj, created = Vote.objects.get_or_create(
-                session_id=session_id,
-                article=article,
-                defaults={'vote_type': vote_type}
-            )
+    data = json.loads(request.body)
+    article_id = data.get('article_id')
+    vote_type = data.get('vote_type')
+    session_id = get_or_create_session(request)
 
-            if not created:
-                # Update existing vote
-                if vote_obj.vote_type == vote_type:
-                    # Remove vote
-                    if vote_type == 'up':
-                        article.upvotes = max(0, article.upvotes - 1)
-                    else:
-                        article.downvotes = max(0, article.downvotes - 1)
-                    vote_obj.delete()
-                    new_vote = None
-                else:
-                    # Change vote
-                    if vote_obj.vote_type == 'up':
-                        article.upvotes = max(0, article.upvotes - 1)
-                        article.downvotes += 1
-                    else:
-                        article.downvotes = max(0, article.downvotes - 1)
-                        article.upvotes += 1
-                    vote_obj.vote_type = vote_type
-                    vote_obj.save()
-                    new_vote = vote_type
-            else:
-                # New vote
+    try:
+        article = NewsArticle.objects.get(id=article_id)
+        vote_obj, created = Vote.objects.get_or_create(
+            session_id=session_id,
+            article=article,
+            defaults={'vote_type': vote_type}
+        )
+
+        if not created:
+            if vote_obj.vote_type == vote_type:
+                # Remove vote
                 if vote_type == 'up':
-                    article.upvotes += 1
+                    article.upvotes = max(0, article.upvotes - 1)
                 else:
+                    article.downvotes = max(0, article.downvotes - 1)
+                vote_obj.delete()
+                new_vote = None
+            else:
+                # Switch vote
+                if vote_obj.vote_type == 'up':
+                    article.upvotes = max(0, article.upvotes - 1)
                     article.downvotes += 1
+                else:
+                    article.downvotes = max(0, article.downvotes - 1)
+                    article.upvotes += 1
+                vote_obj.vote_type = vote_type
+                vote_obj.save()
                 new_vote = vote_type
+        else:
+            # New vote
+            if vote_type == 'up':
+                article.upvotes += 1
+            else:
+                article.downvotes += 1
+            new_vote = vote_type
 
-            article.save()
+        article.save()
 
-            return JsonResponse({
-                'status': 'success',
-                'upvotes': article.upvotes,
-                'downvotes': article.downvotes,
-                'user_vote': new_vote
-            })
+        return JsonResponse({
+            'status': 'success',
+            'upvotes': article.upvotes,
+            'downvotes': article.downvotes,
+            'user_vote': new_vote,
+        })
 
-        except NewsArticle.DoesNotExist:
-            return JsonResponse({'status': 'error', 'message': 'Article not found'}, status=404)
-
-    return JsonResponse({'status': 'error', 'message': 'Invalid request'}, status=400)
+    except NewsArticle.DoesNotExist:
+        return JsonResponse({'status': 'error', 'message': 'Article not found'}, status=404)
 
 
 @csrf_exempt
 def add_comment(request):
     """Add a comment to an article"""
-    if request.method == 'POST':
-        data = json.loads(request.body)
-        article_id = data.get('article_id')
-        comment_text = data.get('text')
-        
-        # Get author name
-        if request.user.is_authenticated:
-            author_name = request.user.first_name or request.user.username 
-        else:
-            author_name = data.get('author', 'Anonymous')
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'Invalid request'}, status=400)
 
-        try:
-            article = NewsArticle.objects.get(id=article_id)
-            comment = Comment.objects.create(
-                article=article,
-                text=comment_text,
-                author_name=author_name
-            )
+    data = json.loads(request.body)
+    article_id = data.get('article_id')
+    comment_text = data.get('text')
 
-            return JsonResponse({
-                'status': 'success',
-                'comment': {
-                    'author': comment.author_name,
-                    'text': comment.text,
-                    'created_at': comment.created_at.strftime('%Y-%m-%d %H:%M')
-                }
-            })
+    if request.user.is_authenticated:
+        author_name = request.user.first_name or request.user.username
+    else:
+        author_name = data.get('author', 'Anonymous')
 
-        except NewsArticle.DoesNotExist:
-            return JsonResponse({'status': 'error', 'message': 'Article not found'}, status=404)
+    try:
+        article = NewsArticle.objects.get(id=article_id)
+        comment = Comment.objects.create(
+            article=article, text=comment_text, author_name=author_name
+        )
 
-    return JsonResponse({'status': 'error', 'message': 'Invalid request'}, status=400)
+        return JsonResponse({
+            'status': 'success',
+            'comment': {
+                'author': comment.author_name,
+                'text': comment.text,
+                'created_at': comment.created_at.strftime('%Y-%m-%d %H:%M'),
+            },
+        })
+    except NewsArticle.DoesNotExist:
+        return JsonResponse({'status': 'error', 'message': 'Article not found'}, status=404)
 
-
-# ==================== Polls FIX ====================
+# ==================== Polls ====================
 
 def get_polls(request):
     """Get active polls"""
-    from .models import PollOption 
-    from django.db.models.functions import Coalesce 
-
-    # Fetch active polls, prefetching options for efficiency
     polls_qs = Poll.objects.filter(is_active=True).prefetch_related('options')
-    
     polls_data = []
+
     for poll in polls_qs:
-        # 1. Calculate total votes for this poll
-        # Sum all votes from related PollOption objects, defaulting to 0 if none exist
-        total_votes_agg = poll.options.aggregate(total=Coalesce(Sum('votes'), 0))
-        total_votes = total_votes_agg['total']
-        
-        options_data = []
-        for option in poll.options.all():
-            # 2. Calculate percentage
-            percentage = round((option.votes / total_votes) * 100, 1) if total_votes > 0 else 0
-            
-            options_data.append({
-                'id': option.id,
-                'text': option.text,
-                'votes': option.votes,
-                'percentage': percentage, # <-- This now sends the data the JS expects
-            })
+        total_votes = poll.options.aggregate(total=Coalesce(Sum('votes'), 0))['total']
+        options_data = [
+            {
+                'id': o.id,
+                'text': o.text,
+                'votes': o.votes,
+                'percentage': round((o.votes / total_votes) * 100, 1) if total_votes > 0 else 0,
+            }
+            for o in poll.options.all()
+        ]
 
         polls_data.append({
             'id': poll.id,
             'question': poll.question,
-            'options': options_data, # <-- Send the corrected options list
-            'total_votes': total_votes
+            'options': options_data,
+            'total_votes': total_votes,
         })
-    
+
     return JsonResponse({'polls': polls_data})
 
 
 @csrf_exempt
 def vote_poll(request):
     """Vote on a poll"""
-    from .models import PollOption 
-    
-    if request.method == 'POST':
-        data = json.loads(request.body)
-        option_id = data.get('option_id')
-        
-        try:
-            # 1. Look up the PollOption object using the ID
-            option = PollOption.objects.get(id=option_id)
-            
-            # 2. Atomically increment votes (safe update)
-            option.votes = F('votes') + 1
-            option.save()
-            option.refresh_from_db()
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'Invalid request'}, status=400)
 
-            # The frontend calls get_polls again to refresh the poll data
-            return JsonResponse({
-                'status': 'success',
-                'option_id': option.id
-            })
-            
-        except PollOption.DoesNotExist:
-            return JsonResponse({'status': 'error', 'message': 'Poll option not found'}, status=404)
-        except Exception as e:
-             return JsonResponse({'status': 'error', 'message': f'Server error during vote: {type(e).__name__}'}, status=500)
-    
-    return JsonResponse({'status': 'error', 'message': 'Invalid request'}, status=400)
+    data = json.loads(request.body)
+    option_id = data.get('option_id')
 
+    try:
+        option = PollOption.objects.get(id=option_id)
+        option.votes = F('votes') + 1
+        option.save()
+        option.refresh_from_db()
 
-# ==================== Stats FIX ====================
+        return JsonResponse({'status': 'success', 'option_id': option.id})
+
+    except PollOption.DoesNotExist:
+        return JsonResponse({'status': 'error', 'message': 'Poll option not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': f'Server error: {type(e).__name__}'}, status=500)
+
+# ==================== Stats ====================
 
 def get_stats(request):
     """Get overall statistics"""
-    
-    # Calculate Total Poll Votes (using Coalesce for safety, matching your Polls fix)
-    total_poll_votes = PollOption.objects.all().aggregate(total=Coalesce(Sum('votes'), 0))['total']
+    total_poll_votes = PollOption.objects.aggregate(total=Coalesce(Sum('votes'), 0))['total']
 
-    # Aggregate general stats
     stats = {
         'total_articles': NewsArticle.objects.count(),
         'total_votes': Vote.objects.count(),
@@ -511,52 +542,40 @@ def get_stats(request):
         'total_polls': Poll.objects.count(),
         'total_poll_votes': total_poll_votes,
     }
-    
-    # Calculate Articles by Category (The Missing Data)
+
     category_counts_qs = NewsArticle.objects.values('category').annotate(count=Count('id'))
-    
-    # Format the data into the dictionary expected by dashboard.html's JavaScript
-    by_category_data = {
-        item['category']: item['count'] for item in category_counts_qs
-    }
-    
-    stats['by_category'] = by_category_data
-    
+    stats['by_category'] = {i['category']: i['count'] for i in category_counts_qs}
+
     return JsonResponse(stats)
 
 
 @login_required
 def get_user_stats_auth(request):
     """Get authenticated user statistics"""
+    if request.user.profile.onboarding_complete is False: 
+        return JsonResponse({'status': 'error', 'message': 'Setup incomplete'}, status=403) 
+
     user = request.user
     profile = user.profile
     session_id = request.session.session_key
     
     # --- 1. Get Votes and Comments ---
-    # Use session_id for votes
     user_votes_qs = Vote.objects.filter(session_id=session_id)
     upvotes = user_votes_qs.filter(vote_type='up').count()
-    # downvotes = user_votes_qs.filter(vote_type='down').count() # Not needed here based on screenshot
 
-    # Use first_name/username for comments, accounting for potential name differences
-    # Note: We filter by primary user identifier to ensure all activity is tracked regardless of session.
     user_comments_qs = Comment.objects.filter(author_name__in=[user.username, user.first_name]).select_related('article') 
     
     # --- 2. Get Preferences ---
     if isinstance(profile.preferred_categories, list):
-        # Handle case where preferred_categories might be a list (from initial migration), convert to dict
         preferences = {cat: 5.0 for cat in profile.preferred_categories}
     else:
-        # Use the stored JSONField dictionary
         preferences = profile.preferred_categories or {}
         
-    # Find favorite category based on highest score in the dictionary
     favorite_category = max(preferences.items(), key=lambda x: x[1] if isinstance(x[1], (int, float)) else 0)[0] if preferences else 'None'
     
     # --- 3. Recent Activity (Votes + Comments) ---
     recent_activity = []
     
-    # Fetch recent votes (top 5)
     for vote in user_votes_qs.select_related('article').order_by('-created_at')[:5]:
         recent_activity.append({
             'title': vote.article.title[:40] + '...',
@@ -564,7 +583,6 @@ def get_user_stats_auth(request):
             'time': get_relative_time(vote.created_at)
         })
         
-    # Fetch recent comments (top 5)
     for comment in user_comments_qs.order_by('-created_at')[:5]:
         recent_activity.append({
             'title': comment.article.title[:40] + '...',
@@ -572,23 +590,18 @@ def get_user_stats_auth(request):
             'time': get_relative_time(comment.created_at)
         })
         
-    # Sort the combined list by date (using the datetime objects for correct sorting)
-    # Note: We rely on the implicit sorting of the DB queries and simply present the combined list, 
-    # as mixing vote/comment creation times is more reliable than sorting by the derived `get_relative_time` string.
-    recent_activity.sort(key=lambda x: x['time'], reverse=False) # Keep original sort order, usually freshest first
+    recent_activity.sort(key=lambda x: x['time'], reverse=False)
 
     stats = {
-        # The frontend expects 'articles_read' as a number, fetching from profile for consistency
         'articles_read': profile.total_articles_read,
         'upvotes_given': upvotes,
         'comments_posted': user_comments_qs.count(),
         'favorite_category': favorite_category.title() if favorite_category != 'None' else 'None yet',
-        'preferences': {k.title(): round(v, 1) for k, v in preferences.items()}, # Title case and round scores
+        'preferences': {k.title(): round(v, 1) for k, v in preferences.items()},
         'recent_activity': recent_activity[:10],
     }
     
     return JsonResponse(stats)
-
 
 # ==================== News Refresh (Public & Admin) ====================
 

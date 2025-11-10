@@ -29,13 +29,14 @@ class SignUpForm(UserCreationForm):
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # MODIFIED: Updated placeholders for temporary password clarity
         self.fields['password1'].widget.attrs.update({
             'class': 'form-input',
-            'placeholder': 'Password'
+            'placeholder': 'Temporary Password'
         })
         self.fields['password2'].widget.attrs.update({
             'class': 'form-input',
-            'placeholder': 'Confirm password'
+            'placeholder': 'Confirm Temporary password'
         })
     
     def clean_email(self):
@@ -43,6 +44,41 @@ class SignUpForm(UserCreationForm):
         if User.objects.filter(email=email).exists():
             raise forms.ValidationError('This email is already registered.')
         return email
+
+class SetInitialPasswordForm(forms.Form):
+    """The form used for the mandatory permanent password reset after signup."""
+    new_password1 = forms.CharField(
+        label="New Password",
+        widget=forms.PasswordInput(attrs={'class': 'form-input', 'placeholder': 'New Password'}),
+        strip=False,
+        help_text="Enter a strong password."
+    )
+    new_password2 = forms.CharField(
+        label="New Password Confirmation",
+        widget=forms.PasswordInput(attrs={'class': 'form-input', 'placeholder': 'Confirm New Password'}),
+        strip=False,
+        help_text="Enter the same password as above, for verification."
+    )
+
+    def __init__(self, user, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.user = user
+
+    def clean_new_password2(self):
+        new_password1 = self.cleaned_data.get('new_password1')
+        new_password2 = self.cleaned_data.get('new_password2')
+        if new_password1 and new_password2:
+            if new_password1 != new_password2:
+                raise forms.ValidationError(
+                    "The two password fields didn't match."
+                )
+        return new_password2
+
+    def save(self):
+        new_password = self.cleaned_data["new_password1"]
+        self.user.set_password(new_password)
+        self.user.save()
+        return self.user
 
 class OnboardingForm(forms.ModelForm):
     CATEGORY_CHOICES = [
