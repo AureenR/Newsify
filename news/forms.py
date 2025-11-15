@@ -79,41 +79,29 @@ class SignUpForm(UserCreationForm):
                 raise forms.ValidationError('The two password fields must match.')
         
         return cleaned_data
+        
+    def save(self, commit=True):
+        # Call the parent's save method to create the user instance.
+        user = super().save(commit=commit)
+        
+        use_suggested = self.cleaned_data.get('use_suggested_password')
 
-class SetInitialPasswordForm(forms.Form):
-    """The form used for the mandatory permanent password reset after signup."""
-    new_password1 = forms.CharField(
-        label="New Password",
-        widget=forms.PasswordInput(attrs={'class': 'form-input', 'placeholder': 'New Password'}),
-        strip=False,
-        help_text="Enter a strong password."
-    )
-    new_password2 = forms.CharField(
-        label="New Password Confirmation",
-        widget=forms.PasswordInput(attrs={'class': 'form-input', 'placeholder': 'Confirm New Password'}),
-        strip=False,
-        help_text="Enter the same password as above, for verification."
-    )
+        if use_suggested:
+            # Generate a secure password
+            suggested_password = generate_secure_password()
+            
+            # Set the generated password on the user object, overriding any password set by the parent form's save
+            user.set_password(suggested_password)
+            
+            # If commit is True, save the updated password to the database
+            if commit:
+                user.save()
+            
+            # Store the generated password on the form instance so the view can access it
+            self.suggested_password = suggested_password
+            
+        return user
 
-    def __init__(self, user, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.user = user
-
-    def clean_new_password2(self):
-        new_password1 = self.cleaned_data.get('new_password1')
-        new_password2 = self.cleaned_data.get('new_password2')
-        if new_password1 and new_password2:
-            if new_password1 != new_password2:
-                raise forms.ValidationError(
-                    "The two password fields didn't match."
-                )
-        return new_password2
-
-    def save(self):
-        new_password = self.cleaned_data["new_password1"]
-        self.user.set_password(new_password)
-        self.user.save()
-        return self.user
 
 class OnboardingForm(forms.ModelForm):
     CATEGORY_CHOICES = [

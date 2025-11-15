@@ -237,7 +237,18 @@
                     <div class="error-text">{{ form.password2.errors.0 }}</div>
                 {% endif %}
             </div>
-
+            
+            <div class="form-group" style="margin-bottom: 25px;">
+                <div style="display: flex; align-items: center;">
+                    {{ form.use_suggested_password }}
+                    <label for="useSuggestedPassword" style="margin-left: 10px; margin-bottom: 0; font-weight: normal; color: #333;">
+                        Use a suggested secure password (you'll set a permanent one next)
+                    </label>
+                </div>
+                {% if form.use_suggested_password.errors %}
+                    <div class="error-text">{{ form.use_suggested_password.errors.0 }}</div>
+                {% endif %}
+            </div>
             <button type="submit" class="btn-primary">Create Account</button>
         </form>
 
@@ -249,5 +260,33 @@
             <a href="/">← Back to News</a>
         </div>
     </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Get the checkbox, and the container groups for the two password fields
+            const suggestedPasswordCheckbox = document.getElementById('useSuggestedPassword');
+            // We use querySelector with the ID set in forms.py to find the inputs, then get their parent .form-group container
+            const password1Group = document.querySelector('input#password1').closest('.form-group');
+            const password2Group = document.querySelector('input#password2').closest('.form-group');
+
+            function togglePasswordFields() {
+                // If the checkbox is checked, hide the manual password fields
+                if (suggestedPasswordCheckbox.checked) {
+                    password1Group.style.display = 'none';
+                    password2Group.style.display = 'none';
+                } else {
+                    // Otherwise, show them
+                    password1Group.style.display = 'block';
+                    password2Group.style.display = 'block';
+                }
+            }
+
+            // Run on page load to set the initial state (in case of a form error)
+            togglePasswordFields();
+
+            // Attach the event listener to the checkbox
+            suggestedPasswordCheckbox.addEventListener('change', togglePasswordFields);
+        });
+    </script>
 </body>
 </html>

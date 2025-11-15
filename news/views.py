@@ -15,7 +15,7 @@ from .forms import (
     OnboardingForm,
     ProfileUpdateForm,
     PreferencesUpdateForm,
-    SetInitialPasswordForm,
+    # Removed SetInitialPasswordForm import as the view is removed
     ChangePasswordForm,
     generate_secure_password,
 )
@@ -70,50 +70,61 @@ def calculate_reading_time(text):
 
 # ==================== Public Pages ====================
 
+# In news/views.py
+
+# ==================== Public Pages ====================
+
+# In news/views.py
+
+# ==================== Public Pages ====================
+
 def index(request):
     """Homepage view"""
-    if request.user.is_authenticated and not request.user.profile.onboarding_complete:
-        return redirect('set_initial_password')
-
+    
     if request.user.is_authenticated:
+        # Redirect non-onboarded users to onboarding (First step after sign-up)
+        if not request.user.profile.onboarding_complete:
+            return redirect('onboarding')
         return render(request, 'index.html')
-    return render(request, 'landing.html')
+        
+    # Reverted: Show landing page for unauthenticated users
+    return render(request, 'landing.html') 
+
+# ... rest of the file remains the same
+
+# ==================== Authentication ====================
+# ... rest of the file remains the same
 
 # ==================== Authentication ====================
 
 def signup_view(request):
-    """User signup with optional suggested password"""
+    """User signup with optional suggested password. Redirects to onboarding."""
     if request.user.is_authenticated:
         if not request.user.profile.onboarding_complete:
-            return redirect('set_initial_password')
+            return redirect('onboarding')
         return redirect('index')
 
     if request.method == 'POST':
         form = SignUpForm(request.POST)
         if form.is_valid():
-            # Check if user wants to use suggested password
             use_suggested = form.cleaned_data.get('use_suggested_password')
             
-            if use_suggested:
-                # Generate and use the suggested password
-                suggested_password = request.POST.get('suggested_password_value', generate_secure_password())
-                user = form.save(commit=False)
-                user.set_password(suggested_password)
-                user.save()
-                
-                # Store the password temporarily in session to show to user
-                request.session['temp_password'] = suggested_password
-            else:
-                user = form.save()
+            # form.save() handles creating the user and setting the password 
+            # (either manual or suggested, as per the logic added to forms.py)
+            user = form.save()
             
             login(request, user)
             
+            # Use success messages appropriate for the flow
             if use_suggested:
-                messages.success(request, 'Account created! Your password has been saved. Please note it down.')
+                # The generated password is in form.suggested_password (from forms.py)
+                request.session['temp_password'] = form.suggested_password
+                messages.success(request, 'Account created! You were logged in with a secure suggested password. Please set your preferences now, and you can change your password later in your profile.')
             else:
-                messages.info(request, 'Account created! Please set your new password.')
+                messages.success(request, 'Account created! Welcome to Newsify. Please set your preferences.')
             
-            return redirect('set_initial_password')
+            # The next step is mandatory Onboarding
+            return redirect('onboarding')
         else:
             messages.error(request, 'Please correct the errors below.')
     else:
@@ -126,7 +137,7 @@ def login_view(request):
     """User login"""
     if request.user.is_authenticated:
         if not request.user.profile.onboarding_complete:
-            return redirect('set_initial_password')
+            return redirect('onboarding')
         return redirect('index')
 
     if request.method == 'POST':
@@ -149,9 +160,10 @@ def login_view(request):
             login(request, user)
             if not user.profile.onboarding_complete:
                 messages.info(
-                    request, 'Welcome! Please complete your profile setup.'
+                    request, 'Welcome back! Please complete your profile setup.'
                 )
-                return redirect('set_initial_password')
+                # Redirect to Onboarding
+                return redirect('onboarding')
             messages.success(request, f'Welcome back, {user.username}!')
             return redirect('index')
         else:
@@ -167,48 +179,8 @@ def logout_view(request):
     return redirect('index')
 
 
-@login_required
-def set_initial_password_view(request):
-    """Optional password setup/change after registration"""
-    profile = request.user.profile
-    temp_password = request.session.get('temp_password')
-    
-    if request.method == 'POST':
-        # Check if user wants to skip and use suggested password
-        if request.POST.get('skip_password_change') == 'true':
-            if temp_password:
-                # User is happy with suggested password, move to onboarding
-                del request.session['temp_password']
-                profile.onboarding_complete = False  # Will complete in onboarding
-                profile.save()
-                messages.success(request, "Great! Let's personalize your feed.")
-                return redirect('onboarding')
-            else:
-                messages.error(request, 'No suggested password found. Please set a password.')
-        else:
-            # User wants to set a custom password
-            form = SetInitialPasswordForm(request.user, request.POST)
-            if form.is_valid():
-                user = form.save()
-                update_session_auth_hash(request, user)
-                
-                # Clear temp password
-                if temp_password:
-                    del request.session['temp_password']
-                
-                messages.success(request, "Password updated! Let's personalize your feed.")
-                return redirect('onboarding')
-            else:
-                messages.error(request, 'Please correct the errors below.')
-    else:
-        form = SetInitialPasswordForm(request.user)
-
-    context = {
-        'form': form,
-        'temp_password': temp_password,
-        'title': 'Set Your Password'
-    }
-    return render(request, 'set_initial_password.html', context)
+# REMOVED: set_initial_password_view is removed as it is no longer mandatory.
+# Users can change their password using change_password_view.
 
 
 @login_required
@@ -237,6 +209,11 @@ def onboarding_view(request):
     if profile.onboarding_complete:
         messages.info(request, 'You have already completed onboarding.')
         return redirect('index')
+    
+    # Check for temporary password (only set if using suggested password during signup)
+    temp_password = request.session.pop('temp_password', None)
+    if temp_password:
+        messages.info(request, f"Your generated password is: <strong>{temp_password}</strong>. Please save this immediately.")
 
     if request.method == 'POST':
         form = OnboardingForm(request.POST, instance=profile)
@@ -262,7 +239,7 @@ def profile_view(request):
     """User profile page"""
     if not request.user.profile.onboarding_complete:
         messages.warning(request, 'Please complete the setup process first.')
-        return redirect('set_initial_password')
+        return redirect('onboarding')
 
     if request.method == 'POST':
         user_form = ProfileUpdateForm(request.POST, instance=request.user)
@@ -290,7 +267,7 @@ def user_dashboard_auth(request):
     """User activity dashboard"""
     if not request.user.profile.onboarding_complete:
         messages.warning(request, 'Please complete the setup process first.')
-        return redirect('set_initial_password')
+        return redirect('onboarding')
 
     session_id = get_or_create_session(request)
     user_votes = Vote.objects.filter(session_id=session_id).select_related('article')
@@ -307,9 +284,14 @@ def user_dashboard_auth(request):
     return render(request, 'user_dashboard.html', context)
 
 # ==================== API Endpoints ====================
+# (The API endpoints remain the same)
+# ...
+
+# ==================== API Endpoints ====================
 # (Rest of the API endpoints remain the same as in your original file)
 
 def get_news(request):
+# ... (rest of get_news remains the same)
     """Fetch personalized news"""
     session_id = get_or_create_session(request)
     category = request.GET.get('category', 'all')
@@ -396,9 +378,6 @@ def get_news(request):
 
     return JsonResponse({'news': news_data, 'user_preferences': list(preferences.keys())})
 
-
-# (Include all other API endpoints from your original views.py here)
-# I'm keeping them as-is since they don't need changes
 
 def get_archived(request):
     """Fetch old, highly-engaged news (archived)"""
@@ -654,6 +633,7 @@ def get_user_stats_auth(request):
 
 
 def refresh_news_public(request):
+# ... (rest of refresh_news_public remains the same)
     """Public endpoint for users to refresh news"""
     session_id = get_or_create_session(request)
     last_refresh_key = f'last_refresh_{session_id}'
@@ -696,6 +676,7 @@ def refresh_news_public(request):
 
 @staff_member_required
 def refresh_news(request):
+# ... (rest of refresh_news remains the same)
     """Admin endpoint to fetch news"""
     try:
         stats = fetch_and_save_news(
@@ -719,6 +700,7 @@ def refresh_news(request):
 
 @staff_member_required
 def dashboard(request):
+# ... (rest of dashboard remains the same)
     """Admin dashboard view"""
     stats = {
         'total_articles': NewsArticle.objects.count(),
