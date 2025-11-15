@@ -16,6 +16,8 @@ from .forms import (
     ProfileUpdateForm,
     PreferencesUpdateForm,
     SetInitialPasswordForm,
+    ChangePasswordForm,
+    generate_secure_password,
 )
 import json
 from datetime import timedelta
@@ -69,9 +71,9 @@ def calculate_reading_time(text):
 # ==================== Public Pages ====================
 
 def index(request):
-    """Homepage view (Redirects to password setup if onboarding is incomplete)"""
+    """Homepage view"""
     if request.user.is_authenticated and not request.user.profile.onboarding_complete:
-        return redirect('set_initial_password') # Enforcing mandatory password step
+        return redirect('set_initial_password')
 
     if request.user.is_authenticated:
         return render(request, 'index.html')
@@ -80,7 +82,7 @@ def index(request):
 # ==================== Authentication ====================
 
 def signup_view(request):
-    """User signup with redirect to password setup"""
+    """User signup with optional suggested password"""
     if request.user.is_authenticated:
         if not request.user.profile.onboarding_complete:
             return redirect('set_initial_password')
@@ -89,10 +91,29 @@ def signup_view(request):
     if request.method == 'POST':
         form = SignUpForm(request.POST)
         if form.is_valid():
-            user = form.save()
+            # Check if user wants to use suggested password
+            use_suggested = form.cleaned_data.get('use_suggested_password')
+            
+            if use_suggested:
+                # Generate and use the suggested password
+                suggested_password = request.POST.get('suggested_password_value', generate_secure_password())
+                user = form.save(commit=False)
+                user.set_password(suggested_password)
+                user.save()
+                
+                # Store the password temporarily in session to show to user
+                request.session['temp_password'] = suggested_password
+            else:
+                user = form.save()
+            
             login(request, user)
-            messages.info(request, 'Account created! Please set your new password.')
-            return redirect('set_initial_password') # Mandatory password step
+            
+            if use_suggested:
+                messages.success(request, 'Account created! Your password has been saved. Please note it down.')
+            else:
+                messages.info(request, 'Account created! Please set your new password.')
+            
+            return redirect('set_initial_password')
         else:
             messages.error(request, 'Please correct the errors below.')
     else:
@@ -102,10 +123,10 @@ def signup_view(request):
 
 
 def login_view(request):
-    """User login (username/email) + password setup check"""
+    """User login"""
     if request.user.is_authenticated:
         if not request.user.profile.onboarding_complete:
-            return redirect('set_initial_password') # Enforcing mandatory password step
+            return redirect('set_initial_password')
         return redirect('index')
 
     if request.method == 'POST':
@@ -128,9 +149,9 @@ def login_view(request):
             login(request, user)
             if not user.profile.onboarding_complete:
                 messages.info(
-                    request, 'Welcome! Please set your permanent password to continue.'
+                    request, 'Welcome! Please complete your profile setup.'
                 )
-                return redirect('set_initial_password') # Enforcing mandatory password step
+                return redirect('set_initial_password')
             messages.success(request, f'Welcome back, {user.username}!')
             return redirect('index')
         else:
@@ -148,38 +169,70 @@ def logout_view(request):
 
 @login_required
 def set_initial_password_view(request):
-    """Force newly registered users to set a permanent password"""
-    if request.user.profile.onboarding_complete:
-        messages.info(request, 'Your password is already set.')
-        return redirect('index')
-
+    """Optional password setup/change after registration"""
+    profile = request.user.profile
+    temp_password = request.session.get('temp_password')
+    
     if request.method == 'POST':
-        form = SetInitialPasswordForm(request.user, request.POST)
-        if form.is_valid():
-            user = form.save()
-            update_session_auth_hash(request, user)
-            messages.success(request, "Password set successfully! Let's personalize your feed.")
-            return redirect('onboarding') # Redirect to onboarding next
+        # Check if user wants to skip and use suggested password
+        if request.POST.get('skip_password_change') == 'true':
+            if temp_password:
+                # User is happy with suggested password, move to onboarding
+                del request.session['temp_password']
+                profile.onboarding_complete = False  # Will complete in onboarding
+                profile.save()
+                messages.success(request, "Great! Let's personalize your feed.")
+                return redirect('onboarding')
+            else:
+                messages.error(request, 'No suggested password found. Please set a password.')
         else:
-            messages.error(request, 'Please correct the errors below.')
+            # User wants to set a custom password
+            form = SetInitialPasswordForm(request.user, request.POST)
+            if form.is_valid():
+                user = form.save()
+                update_session_auth_hash(request, user)
+                
+                # Clear temp password
+                if temp_password:
+                    del request.session['temp_password']
+                
+                messages.success(request, "Password updated! Let's personalize your feed.")
+                return redirect('onboarding')
+            else:
+                messages.error(request, 'Please correct the errors below.')
     else:
         form = SetInitialPasswordForm(request.user)
 
-    context = {'form': form, 'title': 'Set Your Permanent Password'}
+    context = {
+        'form': form,
+        'temp_password': temp_password,
+        'title': 'Set Your Password'
+    }
     return render(request, 'set_initial_password.html', context)
+
+
+@login_required
+def change_password_view(request):
+    """Allow users to change their password after logging in"""
+    if request.method == 'POST':
+        form = ChangePasswordForm(request.user, request.POST)
+        if form.is_valid():
+            user = form.save()
+            update_session_auth_hash(request, user)
+            messages.success(request, 'Your password has been updated successfully!')
+            return redirect('profile')
+        else:
+            messages.error(request, 'Please correct the errors below.')
+    else:
+        form = ChangePasswordForm(request.user)
+
+    return render(request, 'change_password.html', {'form': form})
 
 
 @login_required
 def onboarding_view(request):
     """Onboarding for new users"""
     profile = request.user.profile
-
-    # Check if the mandatory password step was completed first
-    if not profile.onboarding_complete:
-        messages.warning(
-            request, 'Please set your permanent password before choosing preferences.'
-        )
-        return redirect('set_initial_password') # Redirect back to password setup
 
     if profile.onboarding_complete:
         messages.info(request, 'You have already completed onboarding.')
@@ -209,7 +262,7 @@ def profile_view(request):
     """User profile page"""
     if not request.user.profile.onboarding_complete:
         messages.warning(request, 'Please complete the setup process first.')
-        return redirect('set_initial_password') # Enforcing mandatory password step
+        return redirect('set_initial_password')
 
     if request.method == 'POST':
         user_form = ProfileUpdateForm(request.POST, instance=request.user)
@@ -237,7 +290,7 @@ def user_dashboard_auth(request):
     """User activity dashboard"""
     if not request.user.profile.onboarding_complete:
         messages.warning(request, 'Please complete the setup process first.')
-        return redirect('set_initial_password') # Enforcing mandatory password step
+        return redirect('set_initial_password')
 
     session_id = get_or_create_session(request)
     user_votes = Vote.objects.filter(session_id=session_id).select_related('article')
@@ -254,6 +307,7 @@ def user_dashboard_auth(request):
     return render(request, 'user_dashboard.html', context)
 
 # ==================== API Endpoints ====================
+# (Rest of the API endpoints remain the same as in your original file)
 
 def get_news(request):
     """Fetch personalized news"""
@@ -265,7 +319,7 @@ def get_news(request):
         session_id=session_id, defaults={'preferred_categories': {}}
     )
 
-    # Determine preference source: profile if authenticated, else session
+    # Determine preference source
     if request.user.is_authenticated:
         try:
             profile = request.user.profile
@@ -289,7 +343,7 @@ def get_news(request):
             Q(title__icontains=search_query) | Q(description__icontains=search_query)
         )
 
-    articles = list(articles_qs[:100])  # Limit to 100
+    articles = list(articles_qs[:100])
 
     # Calculate personalized scores
     articles_with_scores = [
@@ -342,6 +396,9 @@ def get_news(request):
 
     return JsonResponse({'news': news_data, 'user_preferences': list(preferences.keys())})
 
+
+# (Include all other API endpoints from your original views.py here)
+# I'm keeping them as-is since they don't need changes
 
 def get_archived(request):
     """Fetch old, highly-engaged news (archived)"""
@@ -404,7 +461,6 @@ def vote_article(request):
 
         if not created:
             if vote_obj.vote_type == vote_type:
-                # Remove vote
                 if vote_type == 'up':
                     article.upvotes = max(0, article.upvotes - 1)
                 else:
@@ -412,7 +468,6 @@ def vote_article(request):
                 vote_obj.delete()
                 new_vote = None
             else:
-                # Switch vote
                 if vote_obj.vote_type == 'up':
                     article.upvotes = max(0, article.upvotes - 1)
                     article.downvotes += 1
@@ -423,7 +478,6 @@ def vote_article(request):
                 vote_obj.save()
                 new_vote = vote_type
         else:
-            # New vote
             if vote_type == 'up':
                 article.upvotes += 1
             else:
@@ -475,7 +529,6 @@ def add_comment(request):
     except NewsArticle.DoesNotExist:
         return JsonResponse({'status': 'error', 'message': 'Article not found'}, status=404)
 
-# ==================== Polls ====================
 
 def get_polls(request):
     """Get active polls"""
@@ -526,7 +579,6 @@ def vote_poll(request):
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': f'Server error: {type(e).__name__}'}, status=500)
 
-# ==================== Stats ====================
 
 def get_stats(request):
     """Get overall statistics"""
@@ -559,13 +611,11 @@ def get_user_stats_auth(request):
     profile = user.profile
     session_id = request.session.session_key
     
-    # --- 1. Get Votes and Comments ---
     user_votes_qs = Vote.objects.filter(session_id=session_id)
     upvotes = user_votes_qs.filter(vote_type='up').count()
 
     user_comments_qs = Comment.objects.filter(author_name__in=[user.username, user.first_name]).select_related('article') 
     
-    # --- 2. Get Preferences ---
     if isinstance(profile.preferred_categories, list):
         preferences = {cat: 5.0 for cat in profile.preferred_categories}
     else:
@@ -573,7 +623,6 @@ def get_user_stats_auth(request):
         
     favorite_category = max(preferences.items(), key=lambda x: x[1] if isinstance(x[1], (int, float)) else 0)[0] if preferences else 'None'
     
-    # --- 3. Recent Activity (Votes + Comments) ---
     recent_activity = []
     
     for vote in user_votes_qs.select_related('article').order_by('-created_at')[:5]:
@@ -603,18 +652,13 @@ def get_user_stats_auth(request):
     
     return JsonResponse(stats)
 
-# ==================== News Refresh (Public & Admin) ====================
 
 def refresh_news_public(request):
-    """
-    Public endpoint for users to refresh news
-    Limited to prevent API abuse
-    """
+    """Public endpoint for users to refresh news"""
     session_id = get_or_create_session(request)
     last_refresh_key = f'last_refresh_{session_id}'
     last_refresh = request.session.get(last_refresh_key)
     
-    # --- Rate Limiting Logic ---
     if last_refresh:
         try:
             last_refresh_time = timezone.datetime.fromisoformat(last_refresh)
@@ -629,14 +673,12 @@ def refresh_news_public(request):
                 'message': f'Please wait {int(300 - time_since_refresh)} seconds before refreshing again.'
             }, status=429)
     
-    # --- Core Logic with Robust Error Handling ---
     try:
         stats = fetch_and_save_news(
             categories=['general', 'technology'],
             articles_per_category=5
         )
         
-        # Update last refresh time only on successful scraping
         request.session[last_refresh_key] = timezone.now().isoformat()
         
         return JsonResponse({
@@ -646,7 +688,6 @@ def refresh_news_public(request):
             'by_category': stats['by_category']
         })
     except Exception as e:
-        # Catch any exception during scraping (e.g., requests.exceptions.ConnectionError)
         return JsonResponse({
             'status': 'error',
             'message': f'Scraping failed due to a server error: {type(e).__name__}'
@@ -655,12 +696,10 @@ def refresh_news_public(request):
 
 @staff_member_required
 def refresh_news(request):
-    """
-    Admin endpoint to fetch news with higher limits.
-    """
+    """Admin endpoint to fetch news"""
     try:
         stats = fetch_and_save_news(
-            categories=None,  # Fetch all categories
+            categories=None,
             articles_per_category=10
         )
         

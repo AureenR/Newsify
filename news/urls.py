@@ -13,6 +13,7 @@ urlpatterns = [
     path('login/', views.login_view, name='login'),
     path('logout/', views.logout_view, name='logout'),
     path('onboarding/', views.onboarding_view, name='onboarding'),
+    path('change-password/', views.change_password_view, name='change_password'),
     
     # User pages
     path('profile/', views.profile_view, name='profile'),
@@ -31,10 +32,10 @@ urlpatterns = [
     path('api/stats/', views.get_stats, name='get_stats'),
     path('api/user-stats/', views.get_user_stats_auth, name='get_user_stats_auth'),
     
-    # Public refresh endpoint (no admin required)
+    # Public refresh endpoint
     path('api/refresh-news-public/', views.refresh_news_public, name='refresh_news_public'),
     
-    # Keep admin one separate
+    # Admin refresh endpoint
     path('api/refresh-news/', views.refresh_news, name='refresh_news'),
     
     path('api/headlines/', views.get_news, name='get_headlines'), 

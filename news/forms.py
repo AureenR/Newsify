@@ -2,6 +2,14 @@ from django import forms
 from django.contrib.auth.models import User
 from django.contrib.auth.forms import UserCreationForm
 from .models import UserProfile
+import secrets
+import string
+
+def generate_secure_password(length=12):
+    """Generate a secure random password"""
+    alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
+    password = ''.join(secrets.choice(alphabet) for i in range(length))
+    return password
 
 class SignUpForm(UserCreationForm):
     email = forms.EmailField(required=True, widget=forms.EmailInput(attrs={
@@ -17,6 +25,15 @@ class SignUpForm(UserCreationForm):
         'placeholder': 'Last name'
     }))
     
+    use_suggested_password = forms.BooleanField(
+        required=False,
+        initial=False,
+        widget=forms.CheckboxInput(attrs={
+            'class': 'password-toggle-checkbox',
+            'id': 'useSuggestedPassword'
+        })
+    )
+    
     class Meta:
         model = User
         fields = ('username', 'first_name', 'last_name', 'email', 'password1', 'password2')
@@ -29,21 +46,39 @@ class SignUpForm(UserCreationForm):
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # MODIFIED: Updated placeholders for temporary password clarity
         self.fields['password1'].widget.attrs.update({
             'class': 'form-input',
-            'placeholder': 'Temporary Password'
+            'placeholder': 'Password (or use suggested)',
+            'id': 'password1'
         })
         self.fields['password2'].widget.attrs.update({
             'class': 'form-input',
-            'placeholder': 'Confirm Temporary password'
+            'placeholder': 'Confirm Password',
+            'id': 'password2'
         })
+        self.fields['password1'].required = False
+        self.fields['password2'].required = False
     
     def clean_email(self):
         email = self.cleaned_data.get('email')
         if User.objects.filter(email=email).exists():
             raise forms.ValidationError('This email is already registered.')
         return email
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        use_suggested = cleaned_data.get('use_suggested_password')
+        password1 = cleaned_data.get('password1')
+        password2 = cleaned_data.get('password2')
+        
+        # If not using suggested password, validate manual passwords
+        if not use_suggested:
+            if not password1:
+                raise forms.ValidationError('Please enter a password or use the suggested password.')
+            if password1 != password2:
+                raise forms.ValidationError('The two password fields must match.')
+        
+        return cleaned_data
 
 class SetInitialPasswordForm(forms.Form):
     """The form used for the mandatory permanent password reset after signup."""
@@ -156,3 +191,55 @@ class PreferencesUpdateForm(forms.ModelForm):
     class Meta:
         model = UserProfile
         fields = ['preferred_categories', 'country', 'bio', 'email_notifications', 'show_images', 'dark_mode']
+
+class ChangePasswordForm(forms.Form):
+    """Form for users to change their password after logging in"""
+    current_password = forms.CharField(
+        label="Current Password",
+        widget=forms.PasswordInput(attrs={
+            'class': 'form-input',
+            'placeholder': 'Enter current password'
+        }),
+        strip=False,
+    )
+    new_password1 = forms.CharField(
+        label="New Password",
+        widget=forms.PasswordInput(attrs={
+            'class': 'form-input',
+            'placeholder': 'Enter new password'
+        }),
+        strip=False,
+        help_text="Enter a strong password."
+    )
+    new_password2 = forms.CharField(
+        label="Confirm New Password",
+        widget=forms.PasswordInput(attrs={
+            'class': 'form-input',
+            'placeholder': 'Confirm new password'
+        }),
+        strip=False,
+    )
+
+    def __init__(self, user, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.user = user
+
+    def clean_current_password(self):
+        current_password = self.cleaned_data.get('current_password')
+        if not self.user.check_password(current_password):
+            raise forms.ValidationError("Current password is incorrect.")
+        return current_password
+
+    def clean_new_password2(self):
+        new_password1 = self.cleaned_data.get('new_password1')
+        new_password2 = self.cleaned_data.get('new_password2')
+        if new_password1 and new_password2:
+            if new_password1 != new_password2:
+                raise forms.ValidationError("The two password fields didn't match.")
+        return new_password2
+
+    def save(self):
+        new_password = self.cleaned_data["new_password1"]
+        self.user.set_password(new_password)
+        self.user.save()
+        return self.user
