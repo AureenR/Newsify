@@ -15,7 +15,6 @@ from .forms import (
     OnboardingForm,
     ProfileUpdateForm,
     PreferencesUpdateForm,
-    # Removed SetInitialPasswordForm import as the view is removed
     ChangePasswordForm,
     generate_secure_password,
 )
@@ -54,11 +53,14 @@ def calculate_personalized_score(article, prefs):
     engagement = min(10, (article.upvotes * 0.5 + article.views * 0.01) / 10)
     credibility = article.credibility_score
     category_pref = prefs.get(article.category, 5)
+    
+    # MODIFIED WEIGHTS: Increased Category Preference (0.5), Recency (0.3)
+    #                   Decreased Engagement (0.1) and Credibility (0.1)
     return (
         recency * 0.3
-        + engagement * 0.3
-        + credibility * 0.2
-        + category_pref * 0.2
+        + engagement * 0.1
+        + credibility * 0.1
+        + category_pref * 0.5
     )
 
 
@@ -70,30 +72,17 @@ def calculate_reading_time(text):
 
 # ==================== Public Pages ====================
 
-# In news/views.py
-
-# ==================== Public Pages ====================
-
-# In news/views.py
-
-# ==================== Public Pages ====================
-
 def index(request):
     """Homepage view"""
-    
+    # Redirect non-onboarded users to onboarding (First step after sign-up)
+    if request.user.is_authenticated and not request.user.profile.onboarding_complete:
+        return redirect('onboarding')
+
     if request.user.is_authenticated:
-        # Redirect non-onboarded users to onboarding (First step after sign-up)
-        if not request.user.profile.onboarding_complete:
-            return redirect('onboarding')
         return render(request, 'index.html')
         
-    # Reverted: Show landing page for unauthenticated users
-    return render(request, 'landing.html') 
-
-# ... rest of the file remains the same
-
-# ==================== Authentication ====================
-# ... rest of the file remains the same
+    # RESTORED: Show landing page for unauthenticated users
+    return render(request, 'landing.html')
 
 # ==================== Authentication ====================
 
@@ -110,7 +99,6 @@ def signup_view(request):
             use_suggested = form.cleaned_data.get('use_suggested_password')
             
             # form.save() handles creating the user and setting the password 
-            # (either manual or suggested, as per the logic added to forms.py)
             user = form.save()
             
             login(request, user)
@@ -179,8 +167,7 @@ def logout_view(request):
     return redirect('index')
 
 
-# REMOVED: set_initial_password_view is removed as it is no longer mandatory.
-# Users can change their password using change_password_view.
+# set_initial_password_view is intentionally REMOVED as per the new, cleaner flow.
 
 
 @login_required
@@ -213,6 +200,7 @@ def onboarding_view(request):
     # Check for temporary password (only set if using suggested password during signup)
     temp_password = request.session.pop('temp_password', None)
     if temp_password:
+        # NOTE: Using 'safe' tag will be needed in the template to render the strong tag correctly
         messages.info(request, f"Your generated password is: <strong>{temp_password}</strong>. Please save this immediately.")
 
     if request.method == 'POST':
@@ -284,14 +272,9 @@ def user_dashboard_auth(request):
     return render(request, 'user_dashboard.html', context)
 
 # ==================== API Endpoints ====================
-# (The API endpoints remain the same)
-# ...
-
-# ==================== API Endpoints ====================
-# (Rest of the API endpoints remain the same as in your original file)
+# ... (rest of the API endpoints remain the same)
 
 def get_news(request):
-# ... (rest of get_news remains the same)
     """Fetch personalized news"""
     session_id = get_or_create_session(request)
     category = request.GET.get('category', 'all')
@@ -633,7 +616,6 @@ def get_user_stats_auth(request):
 
 
 def refresh_news_public(request):
-# ... (rest of refresh_news_public remains the same)
     """Public endpoint for users to refresh news"""
     session_id = get_or_create_session(request)
     last_refresh_key = f'last_refresh_{session_id}'
@@ -676,7 +658,6 @@ def refresh_news_public(request):
 
 @staff_member_required
 def refresh_news(request):
-# ... (rest of refresh_news remains the same)
     """Admin endpoint to fetch news"""
     try:
         stats = fetch_and_save_news(
@@ -700,7 +681,6 @@ def refresh_news(request):
 
 @staff_member_required
 def dashboard(request):
-# ... (rest of dashboard remains the same)
     """Admin dashboard view"""
     stats = {
         'total_articles': NewsArticle.objects.count(),
