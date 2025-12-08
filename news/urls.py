@@ -6,8 +6,13 @@ from . import views
 urlpatterns = [
     # Public pages
     path('', views.index, name='index'),
-    # REMOVED: path('set-password/', views.set_initial_password_view, name='set_initial_password'),
-    
+
+    # Dashboard metric list pages
+    path('dashboard/users/', views.dashboard_users, name='dashboard_users'),
+    path('dashboard/comments/', views.dashboard_comments, name='dashboard_comments'),
+    path('dashboard/articles/', views.dashboard_articles, name='dashboard_articles'),
+    path('dashboard/votes/', views.dashboard_votes, name='dashboard_votes'),
+
     # Authentication
     path('signup/', views.signup_view, name='signup'),
     path('login/', views.login_view, name='login'),
@@ -38,5 +43,6 @@ urlpatterns = [
     # Admin refresh endpoint
     path('api/refresh-news/', views.refresh_news, name='refresh_news'),
     
-    path('api/headlines/', views.get_news, name='get_headlines'), 
+    # Alias for headlines (uses get_news)
+    path('api/headlines/', views.get_news, name='get_headlines'),
 ]

@@ -688,5 +688,32 @@ def dashboard(request):
         'total_votes': Vote.objects.count(),
         'total_comments': Comment.objects.count(),
     }
-    
+
+    # IMPORTANT: return must be inside this function
     return render(request, 'dashboard.html', {'stats': stats})
+
+
+# ====================== CUSTOM DASHBOARD LIST VIEWS ======================
+
+@staff_member_required
+def dashboard_users(request):
+    users = User.objects.all().order_by('username')
+    return render(request, 'dashboard_users.html', {'users': users})
+
+
+@staff_member_required
+def dashboard_comments(request):
+    comments = Comment.objects.select_related('article').order_by('-created_at')
+    return render(request, 'dashboard_comments.html', {'comments': comments})
+
+
+@staff_member_required
+def dashboard_articles(request):
+    articles = NewsArticle.objects.all().order_by('-published_date')
+    return render(request, 'dashboard_articles.html', {'articles': articles})
+
+
+@staff_member_required
+def dashboard_votes(request):
+    votes = Vote.objects.select_related('article').order_by('-created_at')
+    return render(request, 'dashboard_votes.html', {'votes': votes})

@@ -1,0 +1,77 @@
+<h1>Comments</h1>
+<ul>
+    {% for c in comments %}
+        <li>
+            <strong>{{ c.author_name }}</strong> on 
+            <em>{{ c.article.title }}</em>: {{ c.text }}
+        </li>
+    {% endfor %}
+</ul>
+<style>
+.table-container {
+    width: 100%;
+    margin-top: 20px;
+    background: #fff;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.06);
+}
+
+.table-header {
+    font-size: 22px;
+    font-weight: 600;
+    margin-bottom: 15px;
+}
+
+.search-box {
+    width: 260px;
+    padding: 10px 14px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    outline: none;
+}
+
+.table {
+    width: 100%;
+    border-collapse: collapse;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.table thead {
+    background: #001c40;
+    color: white;
+}
+
+.table th, .table td {
+    padding: 12px 16px;
+    text-align: left;
+}
+
+.table tbody tr:nth-child(even) {
+    background: #f7f9fc;
+}
+
+.table tbody tr:hover {
+    background: #e8f1ff;
+}
+
+.badge {
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.badge-up {
+    background: #d5f5d5;
+    color: #128a12;
+}
+
+.badge-down {
+    background: #ffd5d5;
+    color: #b30000;
+}
+
+</style>

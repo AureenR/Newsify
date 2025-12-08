@@ -198,38 +198,29 @@
         </div>
 
         <div class="stats-grid" id="statsGrid">
-            <div class="stat-card">
-                <div class="stat-number" id="totalArticles">-</div>
-                <div class="stat-label">Total Articles</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-number" id="totalVotes">-</div>
-                <div class="stat-label">Total Votes</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-number" id="totalComments">-</div>
-                <div class="stat-label">Total Comments</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-number" id="activeUsers">-</div>
-                <div class="stat-label">Active Users</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-number" id="totalUsers">-</div>
-                <div class="stat-label">Total Users</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-number" id="totalProfiles">-</div>
-                <div class="stat-label">User Profiles</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-number" id="totalPolls">-</div>
-                <div class="stat-label">Polls</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-number" id="totalPollVotes">-</div>
-                <div class="stat-label">Poll Votes</div>
-            </div>
+
+    <a href="/dashboard/users/" class="stat-card">
+        <div class="stat-number" id="totalUsers">-</div>
+        <div class="stat-label">Total Users</div>
+    </a>
+
+    <a href="/dashboard/comments/" class="stat-card">
+        <div class="stat-number" id="totalComments">-</div>
+        <div class="stat-label">Total Comments</div>
+    </a>
+
+    <a href="/dashboard/articles/" class="stat-card">
+        <div class="stat-number" id="totalArticles">-</div>
+        <div class="stat-label">Total Articles</div>
+    </a>
+
+    <a href="/dashboard/votes/" class="stat-card">
+        <div class="stat-number" id="totalVotes">-</div>
+        <div class="stat-label">Total Votes</div>
+    </a>
+
+</div>
+
         </div>
 
         <div class="actions-card">
@@ -258,7 +249,6 @@
         // Load stats on page load
         document.addEventListener('DOMContentLoaded', function() {
             loadStats();
-            // Auto-refresh stats every 10 seconds to reflect new signups, comments, votes, and polls
             setInterval(loadStats, 10000);
         });
 
@@ -270,13 +260,8 @@
                 document.getElementById('totalArticles').textContent = data.total_articles || 0;
                 document.getElementById('totalVotes').textContent = data.total_votes || 0;
                 document.getElementById('totalComments').textContent = data.total_comments || 0;
-                document.getElementById('activeUsers').textContent = data.active_users || 0;
                 document.getElementById('totalUsers').textContent = data.total_users || 0;
-                document.getElementById('totalProfiles').textContent = data.total_profiles || 0;
-                document.getElementById('totalPolls').textContent = data.total_polls || 0;
-                document.getElementById('totalPollVotes').textContent = data.total_poll_votes || 0;
                 
-                // Display category stats
                 const categoryStatsDiv = document.getElementById('categoryStats');
                 if (data.by_category) {
                     categoryStatsDiv.innerHTML = Object.entries(data.by_category)
@@ -309,10 +294,7 @@
                     statusMessage.className = 'status-message success';
                     statusMessage.textContent = data.message;
                     
-                    // Reload stats
-                    setTimeout(() => {
-                        loadStats();
-                    }, 1000);
+                    setTimeout(loadStats, 1000);
                 } else {
                     statusMessage.className = 'status-message error';
                     statusMessage.textContent = 'Error: ' + data.message;
